@@ -1,0 +1,2 @@
+# astrologpt
+astrologyGpt
