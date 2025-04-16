@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Healers Meet Chatbot</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+        }
+        #chat-container {
+            max-height: 70vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        .message {
+            max-width: 80%;
+            margin: 0.5rem;
+            padding: 1rem;
+            border-radius: 0.5rem;
+        }
+        .user-message {
+            background-color: #e0f2fe;
+            margin-left: auto;
+        }
+        .bot-message {
+            background-color: #f3f4f6;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-2xl bg-white rounded-lg shadow-lg p-6">
+        <!-- User ID Input Screen -->
+        <div id="user-id-screen" class="text-center">
+            <h1 class="text-2xl font-bold text-gray-800 mb-4">Welcome to Healers Meet</h1>
+            <p class="text-gray-600 mb-4">Please enter your User ID to start the chat.</p>
+            <input
+                type="text"
+                id="user-id-input"
+                class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                placeholder="Enter your User ID"
+            />
+            <p id="user-id-error" class="text-red-500 hidden mb-4">Please enter a valid User ID (alphanumeric characters only).</p>
+            <button
+                id="start-chat-button"
+                class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            >
+                Start Chat
+            </button>
+        </div>
+
+        <!-- Chat Interface (hidden initially) -->
+        <div id="chat-screen" class="hidden">
+            <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">Healers Meet Chatbot</h1>
+            <div id="chat-container" class="border rounded-lg p-4 mb-4 bg-gray-50">
+                <div id="chat-messages"></div>
+            </div>
+            <div class="flex">
+                <input
+                    type="text"
+                    id="message-input"
+                    class="flex-1 p-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Type your message..."
+                />
+                <button
+                    id="send-button"
+                    class="bg-blue-500 text-white px-4 py-2 rounded-r-lg hover:bg-blue-600"
+                >
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const userIdScreen = document.getElementById('user-id-screen');
+        const userIdInput = document.getElementById('user-id-input');
+        const userIdError = document.getElementById('user-id-error');
+        const startChatButton = document.getElementById('start-chat-button');
+        const chatScreen = document.getElementById('chat-screen');
+        const chatMessages = document.getElementById('chat-messages');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+
+        let userId = localStorage.getItem('userId');
+
+        // Check if user ID exists and show chat screen if valid
+        if (userId && /^[a-zA-Z0-9]+$/.test(userId)) {
+            userIdScreen.classList.add('hidden');
+            chatScreen.classList.remove('hidden');
+            loadChatHistory();
+        }
+
+        // Validate and start chat
+        startChatButton.addEventListener('click', () => {
+            const inputUserId = userIdInput.value.trim();
+            if (/^[a-zA-Z0-9]+$/.test(inputUserId)) {
+                userId = inputUserId;
+                localStorage.setItem('userId', userId);
+                userIdScreen.classList.add('hidden');
+                chatScreen.classList.remove('hidden');
+                loadChatHistory();
+            } else {
+                userIdError.classList.remove('hidden');
+            }
+        });
+
+        userIdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') startChatButton.click();
+        });
+
+        // Load chat history
+        async function loadChatHistory() {
+            try {
+                const response = await fetch(`/history/${userId}`);
+                if (!response.ok) throw new Error('Failed to fetch history');
+                const data = await response.json();
+                chatMessages.innerHTML = '';
+                data.chat_history.forEach(interaction => {
+                    addMessage('user', interaction.user);
+                    addMessage('bot', interaction.astro_chatbot);
+                });
+                scrollToBottom();
+            } catch (error) {
+                console.error('Error loading history:', error);
+                addMessage('bot', 'Welcome! Let’s get started.');
+            }
+        }
+
+        // Add message to chat
+        function addMessage(sender, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender === 'user' ? 'user-message' : 'bot-message'}`;
+            messageDiv.textContent = text;
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // Scroll to bottom of chat
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Send message to backend
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            addMessage('user', message);
+            messageInput.value = '';
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, message })
+                });
+                if (!response.ok) throw new Error('Failed to send message');
+                const data = await response.json();
+                addMessage('bot', data.response);
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addMessage('bot', 'Sorry, something went wrong. Please try again.');
+            }
+        }
+
+        // Event listeners for chat
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>
