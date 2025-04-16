@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI, OpenAIError
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -71,6 +73,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Healers Meet API", lifespan=lifespan)
 
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development; restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Serve static files (optional, for future use)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # Pydantic models
 class ChatRequest(BaseModel):
     user_id: str
@@ -112,7 +126,7 @@ def load_astrologers_data(file_path: str = "./Astrologers.json") -> List[Dict]:
             detail="Failed to load astrologers data"
         )
 
-# Enhanced prompt with updated healer suggestion logic
+# Enhanced prompt with healer suggestion logic
 ENHANCED_PROMPT = """
 You are Maya, a friendly and empathetic astrologer on the Healers Meet platform, dedicated to helping users with their queries. Provide concise, actionable, and topic-specific advice in a warm tone. Focus on the user's chosen topic and ask relevant follow-up questions to deepen the conversation. Support users in these areas only: Mental Health & Emotional Wellness, Enhancing Relationship Harmony, Physical Wellness, Spiritual Growth & Psychic Healing, Addictions and Habit Correction, Financial Stress & Abundance Alignment, Positive Parenting & Child Development, Overcoming Emotional Challenges with Strength, Career Stress & Professional Empowerment, Relationship Issues.
 
@@ -147,6 +161,21 @@ Do not mention limitations like "astrology cannot predict exact timelines." When
 
 # Fallback response for API issues
 FALLBACK_RESPONSE = "I’m here to guide you! Could you clarify or share more about what’s on your mind, perhaps about your career, relationships, or wellness?"
+
+# Serve index.html at root
+@app.get("/", response_class=HTMLResponse)
+async def serve_index():
+    """Serve the main HTML page."""
+    try:
+        with open("templates/index.html", "r") as file:
+            html_content = file.read()
+        return HTMLResponse(content=html_content)
+    except FileNotFoundError:
+        logger.error("index.html not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="HTML file not found"
+        )
 
 # Dependencies
 def get_chat_manager():
