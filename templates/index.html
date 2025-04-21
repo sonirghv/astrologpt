@@ -3,79 +3,272 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Healers Meet Chatbot</title>
-    <!-- Tailwind CSS CDN -->
+    <title>Healers Meet - Astrology Guidance</title>
+    <!-- Tailwind CSS and Font Awesome CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            font-family: 'Arial', sans-serif;
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        },
+                        secondary: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        },
+                        accent: {
+                            50: '#fffbeb',
+                            100: '#fef3c7',
+                            200: '#fde68a',
+                            300: '#fcd34d',
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                            600: '#d97706',
+                            700: '#b45309',
+                            800: '#92400e',
+                            900: '#78350f',
+                        },
+                    }
+                },
+                fontFamily: {
+                    sans: ['Inter', 'sans-serif'],
+                }
+            }
         }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        }
+        
         #chat-container {
-            max-height: 70vh;
+            max-height: 60vh;
             overflow-y: auto;
             scrollbar-width: thin;
         }
+        
         .message {
             max-width: 80%;
-            margin: 0.5rem;
-            padding: 1rem;
-            border-radius: 0.5rem;
+            margin: 0.75rem 0;
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            position: relative;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            animation: fadeIn 0.3s ease-out;
         }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
         .user-message {
-            background-color: #e0f2fe;
+            background-color: #0ea5e9;
+            color: white;
             margin-left: auto;
+            border-bottom-right-radius: 0.25rem;
         }
+        
         .bot-message {
-            background-color: #f3f4f6;
+            background-color: white;
+            color: #1e293b;
             margin-right: auto;
+            border-bottom-left-radius: 0.25rem;
+        }
+        
+        .typing-indicator {
+            display: inline-block;
+        }
+        
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            background-color: #3b82f6;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 1px;
+            animation: bounce 1.5s infinite ease-in-out;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-8px); }
+        }
+        
+        .voice-visualizer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 2px;
+            height: 50px;
+        }
+        
+        .visualizer-bar {
+            width: 3px;
+            background-color: #0ea5e9;
+            height: 5px;
+            border-radius: 1px;
+            animation: none;
+        }
+        
+        .recording .visualizer-bar {
+            animation: soundBars 0.5s infinite alternate;
+        }
+        
+        @keyframes soundBars {
+            0% { height: 5px; }
+            100% { height: 25px; }
+        }
+        
+        .recording .visualizer-bar:nth-child(1) { animation-delay: 0.1s; }
+        .recording .visualizer-bar:nth-child(2) { animation-delay: 0.2s; }
+        .recording .visualizer-bar:nth-child(3) { animation-delay: 0.3s; }
+        .recording .visualizer-bar:nth-child(4) { animation-delay: 0.4s; }
+        .recording .visualizer-bar:nth-child(5) { animation-delay: 0.5s; }
+        .recording .visualizer-bar:nth-child(6) { animation-delay: 0.4s; }
+        .recording .visualizer-bar:nth-child(7) { animation-delay: 0.3s; }
+        .recording .visualizer-bar:nth-child(8) { animation-delay: 0.2s; }
+        .recording .visualizer-bar:nth-child(9) { animation-delay: 0.1s; }
+        
+        @media (max-width: 640px) {
+            .message {
+                max-width: 90%;
+            }
+            #chat-container {
+                max-height: 65vh;
+            }
         }
     </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
-    <div class="w-full max-w-2xl bg-white rounded-lg shadow-lg p-6">
-        <!-- User ID Input Screen -->
-        <div id="user-id-screen" class="text-center">
-            <h1 class="text-2xl font-bold text-gray-800 mb-4">Welcome to Healers Meet</h1>
-            <p class="text-gray-600 mb-4">Please enter your User ID to start the chat.</p>
-            <input
-                type="text"
-                id="user-id-input"
-                class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                placeholder="Enter your User ID"
-            />
-            <p id="user-id-error" class="text-red-500 hidden mb-4">Please enter a valid User ID (alphanumeric characters only).</p>
-            <button
-                id="start-chat-button"
-                class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-            >
-                Start Chat
-            </button>
-        </div>
-
-        <!-- Chat Interface (hidden initially) -->
-        <div id="chat-screen" class="hidden">
-            <h1 class="text-2xl font-bold text-center text-gray-800 mb-4">Healers Meet Chatbot</h1>
-            <div id="chat-container" class="border rounded-lg p-4 mb-4 bg-gray-50">
-                <div id="chat-messages"></div>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl overflow-hidden">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-primary-600 to-primary-800 text-white p-4">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold">Healers Meet</h1>
+                <div class="text-sm opacity-80">Guidance for Your Journey</div>
             </div>
-            <div class="flex">
+        </div>
+        
+        <!-- User ID Input Screen -->
+        <div id="user-id-screen" class="p-6 text-center">
+            <div class="mb-8">
+                <i class="fas fa-user-circle text-5xl text-primary-500 mb-4"></i>
+                <h2 class="text-2xl font-bold text-secondary-800 mb-2">Welcome to Astro Guidance</h2>
+                <p class="text-secondary-600">Enter your User ID to connect with Maya, your personal astrologer</p>
+            </div>
+            
+            <div class="max-w-md mx-auto">
                 <input
                     type="text"
-                    id="message-input"
-                    class="flex-1 p-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Type your message..."
+                    id="user-id-input"
+                    class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 mb-4"
+                    placeholder="Enter your User ID"
                 />
+                <p id="user-id-error" class="text-red-500 hidden mb-4">Please enter a valid User ID (alphanumeric characters only).</p>
                 <button
-                    id="send-button"
-                    class="bg-blue-500 text-white px-4 py-2 rounded-r-lg hover:bg-blue-600"
+                    id="start-chat-button"
+                    class="w-full bg-primary-600 text-white px-4 py-3 rounded-lg hover:bg-primary-700 transition duration-200"
                 >
-                    Send
+                    <i class="fas fa-comments mr-2"></i> Start Your Journey
                 </button>
+            </div>
+        </div>
+
+        <!-- Chat Interface -->
+        <div id="chat-screen" class="hidden">
+            <div id="chat-container" class="p-4">
+                <div id="chat-messages"></div>
+                <div id="typing-indicator" class="message bot-message hidden">
+                    <div class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Voice Visualizer -->
+            <div id="voice-visualizer" class="voice-visualizer mx-auto my-2 hidden">
+                <div class="visualizer-bar"></div>
+                <div class="visualizer-bar"></div>
+                <div class="visualizer-bar"></div>
+                <div class="visualizer-bar"></div>
+                <div class="visualizer-bar"></div>
+                <div class="visualizer-bar"></div>
+                <div class="visualizer-bar"></div>
+                <div class="visualizer-bar"></div>
+                <div class="visualizer-bar"></div>
+            </div>
+            
+            <!-- Input Area -->
+            <div class="p-4 border-t border-secondary-200">
+                <div class="flex items-center">
+                    <div class="flex-1 relative">
+                        <input
+                            type="text"
+                            id="message-input"
+                            class="w-full p-3 pr-20 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder="Type your message..."
+                        />
+                        <div class="absolute right-2 top-1/2 transform -translate-y-1/2 flex">
+                            <button
+                                id="voice-toggle-button"
+                                class="text-accent-500 hover:text-accent-600 mr-3 focus:outline-none"
+                                title="Voice input"
+                            >
+                                <i class="fas fa-microphone text-lg"></i>
+                            </button>
+                            <button
+                                id="send-button"
+                                class="text-primary-600 hover:text-primary-800 focus:outline-none"
+                            >
+                                <i class="fas fa-paper-plane text-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Re-enable voice input link -->
+                <div id="voice-reenable" class="hidden mt-2 text-sm text-secondary-600 text-center">
+                    Voice input disabled. <a href="#" id="enable-voice-link" class="underline hover:text-primary-600">Enable voice input</a>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
+        // DOM Elements
         const userIdScreen = document.getElementById('user-id-screen');
         const userIdInput = document.getElementById('user-id-input');
         const userIdError = document.getElementById('user-id-error');
@@ -84,17 +277,88 @@
         const chatMessages = document.getElementById('chat-messages');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const voiceToggleButton = document.getElementById('voice-toggle-button');
+        const voiceVisualizer = document.getElementById('voice-visualizer');
+        const voiceReenableDiv = document.getElementById('voice-reenable');
+        const enableVoiceLink = document.getElementById('enable-voice-link');
 
+        // State variables
         let userId = localStorage.getItem('userId');
+        let websocket = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let micPermissionGranted = false;
 
-        // Check if user ID exists and show chat screen if valid
-        if (userId && /^[a-zA-Z0-9]+$/.test(userId)) {
-            userIdScreen.classList.add('hidden');
-            chatScreen.classList.remove('hidden');
-            loadChatHistory();
+        // Request microphone permission on page load
+        async function requestMicPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                localStorage.setItem('micPermission', 'granted');
+                micPermissionGranted = true;
+            } catch (error) {
+                console.error('Microphone permission denied:', error);
+                localStorage.setItem('micPermission', 'denied');
+                micPermissionGranted = false;
+            }
+            initializeScreen();
         }
 
-        // Validate and start chat
+        // Initialize screen based on userId
+        function initializeScreen() {
+            updateVoiceButtonState();
+            if (userId && /^[a-zA-Z0-9]+$/.test(userId)) {
+                userIdScreen.classList.add('hidden');
+                chatScreen.classList.remove('hidden');
+                setupWebSocket();
+                loadChatHistory();
+                if (!micPermissionGranted) {
+                    addMessage('bot', 'Voice input disabled. You can type your messages or enable voice input.');
+                }
+            } else {
+                userIdScreen.classList.remove('hidden');
+                chatScreen.classList.add('hidden');
+                localStorage.removeItem('userId'); // Clear invalid or missing userId
+            }
+        }
+
+        // Request permission immediately
+        requestMicPermission();
+
+        // Re-enable voice input
+        enableVoiceLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                localStorage.setItem('micPermission', 'granted');
+                micPermissionGranted = true;
+                updateVoiceButtonState();
+                addMessage('bot', 'Voice input enabled. You can now use the microphone to send messages.');
+            } catch (error) {
+                console.error('Error re-enabling microphone:', error);
+                alert('Could not access your microphone. Please check browser permissions.');
+            }
+        });
+
+        // Update voice button state
+        function updateVoiceButtonState() {
+            if (micPermissionGranted) {
+                voiceToggleButton.disabled = false;
+                voiceToggleButton.classList.remove('opacity-50', 'cursor-not-allowed');
+                voiceToggleButton.classList.add('text-accent-500', 'hover:text-accent-600');
+                voiceReenableDiv.classList.add('hidden');
+            } else {
+                voiceToggleButton.disabled = true;
+                voiceToggleButton.classList.add('opacity-50', 'cursor-not-allowed');
+                voiceToggleButton.classList.remove('text-accent-500', 'hover:text-accent-600');
+                voiceReenableDiv.classList.remove('hidden');
+            }
+        }
+
+        // Start chat
         startChatButton.addEventListener('click', () => {
             const inputUserId = userIdInput.value.trim();
             if (/^[a-zA-Z0-9]+$/.test(inputUserId)) {
@@ -102,7 +366,12 @@
                 localStorage.setItem('userId', userId);
                 userIdScreen.classList.add('hidden');
                 chatScreen.classList.remove('hidden');
+                updateVoiceButtonState();
+                setupWebSocket();
                 loadChatHistory();
+                if (!micPermissionGranted) {
+                    addMessage('bot', 'Voice input disabled. You can type your messages or enable voice input.');
+                }
             } else {
                 userIdError.classList.remove('hidden');
             }
@@ -111,6 +380,45 @@
         userIdInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') startChatButton.click();
         });
+        
+        // WebSocket setup
+        function setupWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/${userId}`;
+            
+            websocket = new WebSocket(wsUrl);
+            
+            websocket.onopen = () => {
+                console.log('WebSocket connection established');
+            };
+            
+            websocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'text_response' || data.type === 'audio_response') {
+                    typingIndicator.classList.add('hidden');
+                    
+                    if (data.type === 'audio_response' && data.transcribed_text) {
+                        addMessage('user', data.transcribed_text);
+                    }
+                    
+                    addMessage('bot', data.response);
+                } else if (data.type === 'error') {
+                    console.error('Error from server:', data.detail);
+                    addMessage('bot', 'Sorry, I encountered an issue. Please try again.');
+                }
+            };
+            
+            websocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                addMessage('bot', 'Connection error. Please refresh the page.');
+            };
+            
+            websocket.onclose = () => {
+                console.log('WebSocket connection closed');
+                setTimeout(setupWebSocket, 3000);
+            };
+        }
 
         // Load chat history
         async function loadChatHistory() {
@@ -118,15 +426,22 @@
                 const response = await fetch(`/history/${userId}`);
                 if (!response.ok) throw new Error('Failed to fetch history');
                 const data = await response.json();
+                
                 chatMessages.innerHTML = '';
-                data.chat_history.forEach(interaction => {
-                    addMessage('user', interaction.user);
-                    addMessage('bot', interaction.astro_chatbot);
-                });
+                
+                if (data.chat_history && data.chat_history.length > 0) {
+                    data.chat_history.forEach(interaction => {
+                        addMessage('user', interaction.user);
+                        addMessage('bot', interaction.astro_chatbot);
+                    });
+                } else {
+                    addMessage('bot', 'Hello! I\'m Maya from Healers Meet. I\'m here to provide astrological guidance. May I know your name?');
+                }
+                
                 scrollToBottom();
             } catch (error) {
                 console.error('Error loading history:', error);
-                addMessage('bot', 'Welcome! Let’s get started.');
+                addMessage('bot', 'Hello! I\'m Maya from Healers Meet. I\'m here to provide astrological guidance. May I know your name?');
             }
         }
 
@@ -134,43 +449,217 @@
         function addMessage(sender, text) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender === 'user' ? 'user-message' : 'bot-message'}`;
-            messageDiv.textContent = text;
+            
+            const contentSpan = document.createElement('span');
+            const formattedText = text.replace(
+                /(https?:\/\/[^\s]+)/g,
+                '<a href="$1" target="_blank" class="underline" rel="noopener noreferrer">$1</a>'
+            );
+            
+            contentSpan.innerHTML = formattedText;
+            messageDiv.appendChild(contentSpan);
+            
             chatMessages.appendChild(messageDiv);
             scrollToBottom();
         }
 
-        // Scroll to bottom of chat
+        // Scroll to bottom
         function scrollToBottom() {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            const chatContainer = document.getElementById('chat-container');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // Send message to backend
-        async function sendMessage() {
+        // Send text message
+        function sendTextMessage() {
             const message = messageInput.value.trim();
             if (!message) return;
 
             addMessage('user', message);
             messageInput.value = '';
-
+            
+            typingIndicator.classList.remove('hidden');
+            scrollToBottom();
+            
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    type: 'text',
+                    message: message
+                }));
+            } else {
+                console.error('WebSocket not connected');
+                sendMessageFallback(message);
+            }
+        }
+        
+        // Fallback to REST API
+        async function sendMessageFallback(message) {
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, message })
+                    body: JSON.stringify({ 
+                        user_id: userId, 
+                        message 
+                    })
                 });
+                
                 if (!response.ok) throw new Error('Failed to send message');
+                
                 const data = await response.json();
+                typingIndicator.classList.add('hidden');
                 addMessage('bot', data.response);
             } catch (error) {
                 console.error('Error sending message:', error);
+                typingIndicator.classList.add('hidden');
                 addMessage('bot', 'Sorry, something went wrong. Please try again.');
             }
         }
+        
+        // Voice input
+        voiceToggleButton.addEventListener('click', async () => {
+            if (!micPermissionGranted) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
+                    localStorage.setItem('micPermission', 'granted');
+                    micPermissionGranted = true;
+                    updateVoiceButtonState();
+                    addMessage('bot', 'Voice input enabled. You can now use the microphone to send messages.');
+                } catch (error) {
+                    console.error('Error enabling microphone:', error);
+                    alert('Could not access your microphone. Please check browser permissions.');
+                    return;
+                }
+            }
+            toggleVoiceRecording();
+        });
+        
+        function toggleVoiceRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+        
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
+                
+                mediaRecorder.addEventListener('dataavailable', event => {
+                    audioChunks.push(event.data);
+                });
+                
+                mediaRecorder.addEventListener('stop', () => {
+                    stream.getTracks().forEach(track => track.stop());
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    sendAudioMessage(audioBlob);
+                });
+                
+                mediaRecorder.start();
+                isRecording = true;
+                
+                voiceToggleButton.classList.remove('text-accent-500', 'hover:text-accent-600');
+                voiceToggleButton.classList.add('text-red-500', 'hover:text-red-600');
+                
+                voiceVisualizer.classList.remove('hidden');
+                voiceVisualizer.classList.add('recording');
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                alert('Could not access your microphone. Please check permissions.');
+            }
+        }
+        
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                
+                voiceToggleButton.classList.remove('text-red-500', 'hover:text-red-600');
+                voiceToggleButton.classList.add('text-accent-500', 'hover:text-accent-600');
+                
+                voiceVisualizer.classList.remove('recording');
+                voiceVisualizer.classList.add('hidden');
+                
+                typingIndicator.classList.remove('hidden');
+                scrollToBottom();
+            }
+        }
+        
+        async function sendAudioMessage(audioBlob) {
+            try {
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                
+                reader.onloadend = () => {
+                    const base64Audio = reader.result.split(',')[1];
+                    
+                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                        websocket.send(JSON.stringify({
+                            type: 'audio',
+                            audio_data: base64Audio
+                        }));
+                    } else {
+                        sendAudioFallback(base64Audio);
+                    }
+                };
+            } catch (error) {
+                console.error('Error processing audio:', error);
+                typingIndicator.classList.add('hidden');
+                addMessage('bot', 'Sorry, I couldn\'t process your voice message. Please try again or type your message.');
+            }
+        }
+        
+        async function sendAudioFallback(base64Audio) {
+            try {
+                const transcribeResponse = await fetch('/transcribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        audio_data: base64Audio
+                    })
+                });
+                
+                if (!transcribeResponse.ok) throw new Error('Failed to transcribe audio');
+                
+                const transcribeData = await transcribeResponse.json();
+                addMessage('user', transcribeData.text);
+                
+                const chatResponse = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        message: transcribeData.text
+                    })
+                });
+                
+                if (!chatResponse.ok) throw new Error('Failed to get response');
+                
+                const responseData = await chatResponse.json();
+                typingIndicator.classList.add('hidden');
+                addMessage('bot', responseData.response);
+            } catch (error) {
+                console.error('Error in audio processing:', error);
+                typingIndicator.classList.add('hidden');
+                addMessage('bot', 'Sorry, I couldn\'t process your voice message. Please try again or type your message.');
+            }
+        }
 
-        // Event listeners for chat
-        sendButton.addEventListener('click', sendMessage);
+        // Event listeners
+        sendButton.addEventListener('click', sendTextMessage);
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter') sendTextMessage();
+        });
+        
+        window.addEventListener('beforeunload', () => {
+            if (isRecording) {
+                stopRecording();
+            }
         });
     </script>
 </body>

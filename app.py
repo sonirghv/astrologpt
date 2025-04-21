@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from openai import OpenAI, OpenAIError
@@ -9,7 +9,13 @@ from datetime import datetime
 import os
 import logging
 import uvicorn
+import json
+import base64
 from contextlib import asynccontextmanager
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from fastapi import Request
+from fastapi.staticfiles import StaticFiles
 
 # Configure logging
 logging.basicConfig(
@@ -29,7 +35,7 @@ async def lifespan(app: FastAPI):
     app.state.openai_client = None
     app.state.collection = None
     try:
-        # MongoDB setup with Motor
+        # MongoDB setup
         mongodb_uri = os.getenv("MONGODB_URI")
         if not mongodb_uri:
             logger.error("MONGODB_URI not set")
@@ -70,6 +76,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Healers Meet API", lifespan=lifespan)
 
+# Set up static files and templates
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+# Serve frontend index.html at root
+@app.get("/", response_class=HTMLResponse)
+async def read_index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
 # Pydantic models
 class ChatRequest(BaseModel):
     user_id: str
@@ -81,7 +96,14 @@ class ChatResponse(BaseModel):
 class HistoryResponse(BaseModel):
     chat_history: List[Dict[str, str]]
 
-# Enhanced prompt with fallback
+class AudioTranscriptionRequest(BaseModel):
+    user_id: str
+    audio_data: str  # Base64 encoded audio
+
+class AudioTranscriptionResponse(BaseModel):
+    text: str
+
+# Enhanced prompt
 ENHANCED_PROMPT = """
 You are Maya, a friendly and empathetic astrologer on the Healers Meet platform, dedicated to helping users with their queries. Provide concise, actionable, and topic-specific advice in a warm tone. Focus on the user's chosen topic and ask a relevant follow-up question to deepen the conversation. 
 
@@ -126,7 +148,7 @@ Your tasks are:
 When discussing relationships or issues involving multiple people, ask for the names of those involved but prioritize our main user's details. Always frame insights as "I can see in your chart" to maintain professionalism.
 """
 
-# Fallback response for API issues
+# Fallback response
 FALLBACK_RESPONSE = "I'm here to guide you at Healers Meet! Could you share more about what's on your mind—perhaps about your relationships, career, or wellness journey?"
 
 # Dependencies
@@ -188,7 +210,7 @@ class ChatHistoryManager:
             
         except Exception as e:
             logger.warning(f"Non-critical failure saving chat history for user {user_id}: {e}")
-            return False  # Allow chat to continue
+            return False
 
     async def get_chat_history(self, user_id: str, limit: int = 10) -> List[Dict[str, str]]:
         """Retrieve chat history for API context."""
@@ -206,11 +228,11 @@ class ChatHistoryManager:
                 logger.info(f"Retrieved chat history for user {user_id}")
                 return messages
             logger.info(f"No chat history found for user {user_id}")
-            return []  # Fresh DB: return empty list
+            return []
             
         except Exception as e:
             logger.warning(f"Non-critical failure retrieving chat history for user {user_id}: {e}")
-            return []  # Fallback: proceed without history
+            return []
 
     async def get_raw_chat_history(self, user_id: str, limit: int = 10) -> List[Dict[str, str]]:
         """Retrieve raw chat history for API response."""
@@ -224,7 +246,7 @@ class ChatHistoryManager:
                 logger.info(f"Retrieved raw chat history for user {user_id}")
                 return user_doc["chat_history"]
             logger.info(f"No chat history found for user {user_id}")
-            return []  # Fresh DB: return empty list
+            return []
             
         except Exception as e:
             logger.error(f"Failed to retrieve raw chat history for user {user_id}: {e}")
@@ -239,10 +261,9 @@ async def get_response(
     chat_manager: ChatHistoryManager = Depends(get_chat_manager),
     openai_client: OpenAI = Depends(get_openai_client),
     max_context: int = 10
-) -> Optional[str]:
+) -> Dict[str, str]:
     """Generate chatbot response with context and fallback."""
     try:
-        # Validate input
         if not user_message:
             logger.warning("Empty message provided")
             raise HTTPException(
@@ -250,21 +271,18 @@ async def get_response(
                 detail="message is required"
             )
         
-        # Get chat history
         logger.debug(f"Fetching chat history for user {user_id}")
         chat_history = await chat_manager.get_chat_history(user_id, max_context)
         if chat_history is None:
             logger.warning(f"Chat history retrieval returned None for user {user_id}")
             chat_history = []
         
-        # Construct messages
         messages = [
             {"role": "system", "content": ENHANCED_PROMPT},
             *chat_history,
             {"role": "user", "content": user_message}
         ]
         
-        # Call OpenAI API
         logger.debug(f"Calling OpenAI API for user {user_id}")
         completion = openai_client.chat.completions.create(
             model="gpt-4o",
@@ -275,28 +293,60 @@ async def get_response(
         
         response = completion.choices[0].message.content.strip()
         
-        # Validate response quality
         if not response or len(response) < 10:
             logger.warning(f"Low-quality response for user {user_id}: {response}")
             response = FALLBACK_RESPONSE
         
-        # Attempt to save interaction
         logger.debug(f"Saving chat history for user {user_id}")
         await chat_manager.save_chat_history(user_id, user_message, response)
         
         logger.info(f"Generated response for user {user_id}")
-        return response
+        return {"response": response}
         
     except HTTPException:
         raise
     except OpenAIError as e:
         logger.error(f"OpenAI API error for user {user_id}: {e}")
-        return FALLBACK_RESPONSE
+        return {"response": FALLBACK_RESPONSE}
     except Exception as e:
         logger.error(f"Failed to generate response for user {user_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Let's try again—what's on your mind?"
+        )
+
+async def transcribe_audio(
+    user_id: str,
+    audio_data: str,
+    openai_client: OpenAI = Depends(get_openai_client)
+) -> str:
+    """Transcribe audio to text using Whisper API."""
+    try:
+        audio_bytes = base64.b64decode(audio_data)
+        temp_audio_path = f"static/audio/temp_{user_id}_{datetime.now().timestamp()}.webm"
+        os.makedirs(os.path.dirname(temp_audio_path), exist_ok=True)
+        
+        with open(temp_audio_path, "wb") as audio_file:
+            audio_file.write(audio_bytes)
+        
+        with open(temp_audio_path, "rb") as audio_file:
+            transcription = openai_client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file
+            )
+        
+        try:
+            os.remove(temp_audio_path)
+        except Exception as e:
+            logger.warning(f"Failed to remove temp audio file: {e}")
+        
+        return transcription.text
+    
+    except Exception as e:
+        logger.error(f"Failed to transcribe audio for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to transcribe audio"
         )
 
 # API Endpoints
@@ -308,18 +358,36 @@ async def chat_endpoint(
 ):
     """Handle user chat requests."""
     try:
-        response = await get_response(
+        response_data = await get_response(
             request.user_id,
             request.message,
             chat_manager,
             openai_client
         )
-        return ChatResponse(response=response)
+        return ChatResponse(**response_data)
     except HTTPException as e:
         raise
     except Exception as e:
         logger.error(f"Chat endpoint failed for user {request.user_id}: {e}")
         return ChatResponse(response=FALLBACK_RESPONSE)
+
+@app.post("/transcribe", response_model=AudioTranscriptionResponse)
+async def transcribe_endpoint(
+    request: AudioTranscriptionRequest,
+    openai_client: OpenAI = Depends(get_openai_client)
+):
+    """Transcribe audio to text."""
+    try:
+        text = await transcribe_audio(request.user_id, request.audio_data, openai_client)
+        return AudioTranscriptionResponse(text=text)
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Transcription endpoint failed for user {request.user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to transcribe audio"
+        )
 
 @app.get("/history/{user_id}", response_model=HistoryResponse)
 async def get_history_endpoint(
@@ -348,7 +416,68 @@ async def get_history_endpoint(
             detail="Failed to retrieve chat history"
         )
 
-# Custom exception handler
+@app.websocket("/ws/{user_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: str,
+    chat_manager: ChatHistoryManager = Depends(get_chat_manager),
+    openai_client: OpenAI = Depends(get_openai_client)
+):
+    """Handle WebSocket connections for real-time chat with speech-to-text."""
+    await websocket.accept()
+    
+    try:
+        while True:
+            message = await websocket.receive_text()
+            data = json.loads(message)
+            
+            if data.get("type") == "text":
+                response_data = await get_response(
+                    user_id,
+                    data.get("message", ""),
+                    chat_manager,
+                    openai_client
+                )
+                
+                await websocket.send_json({
+                    "type": "text_response",
+                    "response": response_data["response"]
+                })
+                
+            elif data.get("type") == "audio":
+                try:
+                    transcribed_text = await transcribe_audio(
+                        user_id,
+                        data.get("audio_data", ""),
+                        openai_client
+                    )
+                    
+                    response_data = await get_response(
+                        user_id,
+                        transcribed_text,
+                        chat_manager,
+                        openai_client
+                    )
+                    
+                    await websocket.send_json({
+                        "type": "audio_response",
+                        "transcribed_text": transcribed_text,
+                        "response": response_data["response"]
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error processing audio: {e}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "detail": "Failed to process audio"
+                    })
+            
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for user {user_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for user {user_id}: {e}")
+        await websocket.close()
+
 @app.exception_handler(Exception)
 async def custom_exception_handler(request, exc):
     """Handle uncaught exceptions."""

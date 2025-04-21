@@ -1,0 +1,156 @@
+/* Healers Meet Astrology Chatbot Styles */
+
+/* Custom animations for elements */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Add starry background effect for the astrology theme */
+.stars-bg {
+  background-color: #0c1445;
+  background-image: 
+    radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 4px),
+    radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 3px),
+    radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 4px);
+  background-size: 550px 550px, 350px 350px, 250px 250px;
+  background-position: 0 0, 40px 60px, 130px 270px;
+}
+
+/* Add gradients for buttons and other elements */
+.gradient-primary {
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+}
+
+.gradient-secondary {
+  background: linear-gradient(135deg, #4f46e5 0%, #818cf8 100%);
+}
+
+.gradient-accent {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+/* Custom scrollbar for the chat container */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background-color: #f1f5f9;
+}
+
+/* Responsive styling */
+@media (max-width: 640px) {
+  .responsive-padding {
+    padding: 1rem;
+  }
+  
+  .responsive-text {
+    font-size: 0.9rem;
+  }
+}
+
+/* Special effects for astrological elements */
+.zodiac-icon {
+  transition: all 0.3s ease;
+}
+
+.zodiac-icon:hover {
+  transform: rotate(15deg) scale(1.1);
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+}
+
+/* Therapies cards styling */
+.therapy-card {
+  transition: all 0.3s ease;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.therapy-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Audio wave animation for voice recording */
+.audio-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+}
+
+.audio-wave span {
+  display: block;
+  width: 3px;
+  margin: 0 2px;
+  background: #3b82f6;
+  height: 100%;
+  border-radius: 3px;
+  animation: wave 1.2s infinite ease-in-out;
+}
+
+@keyframes wave {
+  0%, 40%, 100% {
+    transform: scaleY(0.2);
+  }
+  20% {
+    transform: scaleY(1);
+  }
+}
+
+.audio-wave span:nth-child(2) { animation-delay: 0.1s; }
+.audio-wave span:nth-child(3) { animation-delay: 0.2s; }
+.audio-wave span:nth-child(4) { animation-delay: 0.3s; }
+.audio-wave span:nth-child(5) { animation-delay: 0.4s; }
+.audio-wave span:nth-child(6) { animation-delay: 0.5s; }
+.audio-wave span:nth-child(7) { animation-delay: 0.4s; }
+.audio-wave span:nth-child(8) { animation-delay: 0.3s; }
+.audio-wave span:nth-child(9) { animation-delay: 0.2s; }
+.audio-wave span:nth-child(10) { animation-delay: 0.1s; }
+
+/* Tooltip styling */
+.tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip .tooltip-text {
+  visibility: hidden;
+  width: 120px;
+  background-color: #334155;
+  color: white;
+  text-align: center;
+  border-radius: 4px;
+  padding: 5px;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -60px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 0.75rem;
+}
+
+.tooltip:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+} 
