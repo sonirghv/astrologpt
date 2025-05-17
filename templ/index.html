@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Healers Meet Chatbot</title>
+    <title>Healers Meet - Astrology Guidance</title>
     <!-- Tailwind CSS and Font Awesome CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -169,17 +169,10 @@
                 max-height: 65vh;
             }
         }
-
-        .error-message {
-            color: #ef4444;
-            font-size: 0.875rem;
-            margin-top: 0.25rem;
-            display: none;
-        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
-    <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl billed-hidden">
+    <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl overflow-hidden">
         <!-- Header -->
         <div class="bg-gradient-to-r from-primary-600 to-primary-800 text-white p-4">
             <div class="flex justify-between items-center">
@@ -188,74 +181,22 @@
             </div>
         </div>
         
-        <!-- User Information Input Screen -->
-        <div id="user-info-screen" class="p-6 text-center">
+        <!-- User ID Input Screen -->
+        <div id="user-id-screen" class="p-6 text-center">
             <div class="mb-8">
                 <i class="fas fa-user-circle text-5xl text-primary-500 mb-4"></i>
                 <h2 class="text-2xl font-bold text-secondary-800 mb-2">Welcome to Healers Meet</h2>
-                <p class="text-secondary-600">Please provide your details to connect with Maya, your personal Healer</p>
+                <p class="text-secondary-600">Enter your User ID to connect with Maya, your personal Healer</p>
             </div>
             
             <div class="max-w-md mx-auto">
-                <div class="mb-4">
-                    <input
-                        type="text"
-                        id="name-input"
-                        class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="Enter your Name"
-                    />
-                    <p id="name-error" class="error-message">Name must contain only letters and spaces, and cannot be empty.</p>
-                </div>
-                <div class="mb-4">
-                    <input
-                        type="tel"
-                        id="mobile-input"
-                        class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="+91XXXXXXXXXX"
-                    />
-                    <p id="mobile-error" class="error-message">Mobile number must include country code (e.g., +91) followed by 10 digits.</p>
-                </div>
-                <div class="mb-4">
-                    <input
-                        type="email"
-                        id="email-input"
-                        class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="Enter your Email"
-                    />
-                    <p id="email-error" class="error-message">Please enter a valid email address.</p>
-                </div>
-                <div class="mb-4">
-                    <input
-                        type="text"
-                        id="city-input"
-                        class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="Enter your City"
-                    />
-                    <p id="city-error" class="error-message">City must contain only letters and spaces, and cannot be empty.</p>
-                </div>
-                <div class="mb-4">
-                    <input
-                        type="number"
-                        id="age-input"
-                        class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="Enter your Age"
-                        min="1"
-                    />
-                    <p id="age-error" class="error-message">Age must be a positive integer (1 or greater).</p>
-                </div>
-                <div class="mb-4">
-                    <select
-                        id="gender-input"
-                        class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                        <option value="" disabled selected>Select your Gender</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="other">Other</option>
-                    </select>
-                    <p id="gender-error" class="error-message">Please select a gender.</p>
-                </div>
-                <p id="user-info-error" class="text-red-500 hidden mb-4">Please fill out all fields correctly.</p>
+                <input
+                    type="text"
+                    id="user-id-input"
+                    class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 mb-4"
+                    placeholder="Enter your User ID"
+                />
+                <p id="user-id-error" class="text-red-500 hidden mb-4">Please enter a valid User ID (alphanumeric characters only).</p>
                 <button
                     id="start-chat-button"
                     class="w-full bg-primary-600 text-white px-4 py-3 rounded-lg hover:bg-primary-700 transition duration-200"
@@ -328,20 +269,9 @@
 
     <script>
         // DOM Elements
-        const userInfoScreen = document.getElementById('user-info-screen');
-        const nameInput = document.getElementById('name-input');
-        const mobileInput = document.getElementById('mobile-input');
-        const emailInput = document.getElementById('email-input');
-        const cityInput = document.getElementById('city-input');
-        const ageInput = document.getElementById('age-input');
-        const genderInput = document.getElementById('gender-input');
-        const userInfoError = document.getElementById('user-info-error');
-        const nameError = document.getElementById('name-error');
-        const mobileError = document.getElementById('mobile-error');
-        const emailError = document.getElementById('email-error');
-        const cityError = document.getElementById('city-error');
-        const ageError = document.getElementById('age-error');
-        const genderError = document.getElementById('gender-error');
+        const userIdScreen = document.getElementById('user-id-screen');
+        const userIdInput = document.getElementById('user-id-input');
+        const userIdError = document.getElementById('user-id-error');
         const startChatButton = document.getElementById('start-chat-button');
         const chatScreen = document.getElementById('chat-screen');
         const chatMessages = document.getElementById('chat-messages');
@@ -354,7 +284,7 @@
         const enableVoiceLink = document.getElementById('enable-voice-link');
 
         // State variables
-        let userInfo = JSON.parse(localStorage.getItem('userInfo')) || null;
+        let userId = localStorage.getItem('userId');
         let websocket = null;
         let mediaRecorder = null;
         let audioChunks = [];
@@ -376,11 +306,11 @@
             initializeScreen();
         }
 
-        // Initialize screen based on userInfo
+        // Initialize screen based on userId
         function initializeScreen() {
             updateVoiceButtonState();
-            if (userInfo && validateUserInfo(userInfo)) {
-                userInfoScreen.classList.add('hidden');
+            if (userId && /^[a-zA-Z0-9]+$/.test(userId)) {
+                userIdScreen.classList.add('hidden');
                 chatScreen.classList.remove('hidden');
                 setupWebSocket();
                 loadChatHistory();
@@ -388,72 +318,10 @@
                     addMessage('bot', 'Voice input disabled. You can type your messages or enable voice input.');
                 }
             } else {
-                userInfoScreen.classList.remove('hidden');
+                userIdScreen.classList.remove('hidden');
                 chatScreen.classList.add('hidden');
-                localStorage.removeItem('userInfo'); // Clear invalid or missing userInfo
+                localStorage.removeItem('userId'); // Clear invalid or missing userId
             }
-        }
-
-        // Validate user information
-        function validateUserInfo(info) {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            const mobileRegex = /^\+\d{1,3}\d{10}$/;
-            const nameRegex = /^[a-zA-Z\s]+$/;
-            const cityRegex = /^[a-zA-Z\s]+$/;
-
-            const validations = [
-                {
-                    field: 'name',
-                    value: info.name,
-                    regex: nameRegex,
-                    errorElement: nameError,
-                    errorMessage: 'Name must contain only letters and spaces, and cannot be empty.'
-                },
-                {
-                    field: 'mobile',
-                    value: info.mobile,
-                    regex: mobileRegex,
-                    errorElement: mobileError,
-                    errorMessage: 'Mobile number must include country code (e.g., +91) followed by 10 digits.'
-                },
-                {
-                    field: 'email',
-                    value: info.email,
-                    regex: emailRegex,
-                    errorElement: emailError,
-                    errorMessage: 'Please enter a valid email address.'
-                },
-                {
-                    field: 'city',
-                    value: info.city,
-                    regex: cityRegex,
-                    errorElement: cityError,
-                    errorMessage: 'City must contain only letters and spaces, and cannot be empty.'
-                },
-                {
-                    field: 'age',
-                    value: info.age,
-                    check: () => Number.isInteger(Number(info.age)) && Number(info.age) >= 1,
-                    errorElement: ageError,
-                    errorMessage: 'Age must be a positive integer (1 or greater).'
-                },
-                {
-                    field: 'gender',
-                    value: info.gender,
-                    check: () => ['male', 'female', 'other'].includes(info.gender),
-                    errorElement: genderError,
-                    errorMessage: 'Please select a gender.'
-                }
-            ];
-
-            let isValid = true;
-            validations.forEach(({ field, value, regex, check, errorElement, errorMessage }) => {
-                const valid = value && (regex ? regex.test(value) : check ? check() : false);
-                errorElement.style.display = valid ? 'none' : 'block';
-                if (!valid) isValid = false;
-            });
-
-            return isValid;
         }
 
         // Request permission immediately
@@ -492,19 +360,11 @@
 
         // Start chat
         startChatButton.addEventListener('click', () => {
-            const newUserInfo = {
-                name: nameInput.value.trim(),
-                mobile: mobileInput.value.trim(),
-                email: emailInput.value.trim(),
-                city: cityInput.value.trim(),
-                age: ageInput.value.trim(),
-                gender: genderInput.value
-            };
-
-            if (validateUserInfo(newUserInfo)) {
-                userInfo = newUserInfo;
-                localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                userInfoScreen.classList.add('hidden');
+            const inputUserId = userIdInput.value.trim();
+            if (/^[a-zA-Z0-9]+$/.test(inputUserId)) {
+                userId = inputUserId;
+                localStorage.setItem('userId', userId);
+                userIdScreen.classList.add('hidden');
                 chatScreen.classList.remove('hidden');
                 updateVoiceButtonState();
                 setupWebSocket();
@@ -513,22 +373,18 @@
                     addMessage('bot', 'Voice input disabled. You can type your messages or enable voice input.');
                 }
             } else {
-                userInfoError.classList.remove('hidden');
+                userIdError.classList.remove('hidden');
             }
         });
 
-        // Allow Enter key to submit
-        [nameInput, mobileInput, emailInput, cityInput, ageInput].forEach(input => {
-            input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') startChatButton.click();
-            });
+        userIdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') startChatButton.click();
         });
-
+        
         // WebSocket setup
         function setupWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // Use email as unique identifier for WebSocket
-            const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(userInfo.email)}`;
+            const wsUrl = `${protocol}//${window.location.host}/ws/${userId}`;
             
             websocket = new WebSocket(wsUrl);
             
@@ -548,7 +404,7 @@
                     
                     addMessage('bot', data.response);
                 } else if (data.type === 'error') {
-                    console.error('Error from server:', data.message);
+                    console.error('Error from server:', data.detail);
                     addMessage('bot', 'Sorry, I encountered an issue. Please try again.');
                 }
             };
@@ -567,7 +423,7 @@
         // Load chat history
         async function loadChatHistory() {
             try {
-                const response = await fetch(`/history/${encodeURIComponent(userInfo.email)}`);
+                const response = await fetch(`/history/${userId}`);
                 if (!response.ok) throw new Error('Failed to fetch history');
                 const data = await response.json();
                 
@@ -579,13 +435,13 @@
                         addMessage('bot', interaction.astro_chatbot);
                     });
                 } else {
-                    addMessage('bot', `Hello ${userInfo.name}! I'm Maya from Healers Meet. I'm here to provide Healing guidance. How can I assist you today?`);
+                    addMessage('bot', 'Hello! I\'m Maya from Healers Meet. I\'m here to provide astrological guidance. May I know your name?');
                 }
                 
                 scrollToBottom();
             } catch (error) {
                 console.error('Error loading history:', error);
-                addMessage('bot', `Hello ${userInfo.name}! I'm Maya from Healers Meet. I'm here to provide Healing guidance. How can I assist you today?`);
+                addMessage('bot', 'Hello! I\'m Maya from Healers Meet. I\'m here to provide astrological guidance. May I know your name?');
             }
         }
 
@@ -642,7 +498,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        user_id: userInfo.email, 
+                        user_id: userId, 
                         message 
                     })
                 });
@@ -763,7 +619,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        user_id: userInfo.email,
+                        user_id: userId,
                         audio_data: base64Audio
                     })
                 });
@@ -777,7 +633,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        user_id: userInfo.email,
+                        user_id: userId,
                         message: transcribeData.text
                     })
                 });
