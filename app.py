@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, status, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from openai import OpenAI, OpenAIError
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
         app.state.mongo_client = AsyncIOMotorClient(mongodb_uri, serverSelectionTimeoutMS=5000)
         await app.state.mongo_client.admin.command('ping')
         app.state.db = app.state.mongo_client["HealersMeet"]
-        app.state.collection = app.state.db["users"]
+        app.state.collection = app.state.db["new_users"]
         if app.state.collection is None:
             logger.error("Failed to initialize MongoDB collection")
             raise RuntimeError("MongoDB collection initialization failed")
@@ -86,6 +86,14 @@ async def read_index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 # Pydantic models
+class UserInfo(BaseModel):
+    name: str
+    email: EmailStr
+    mobile: str
+    city: str
+    age: int
+    gender: str
+
 class ChatRequest(BaseModel):
     user_id: str
     message: str
@@ -103,6 +111,10 @@ class AudioTranscriptionRequest(BaseModel):
 class AudioTranscriptionResponse(BaseModel):
     text: str
 
+class UserResponse(BaseModel):
+    success: bool
+    message: str
+
 # Enhanced prompt
 ENHANCED_PROMPT = """
 You are Maya, a friendly and empathetic Healer (who helps to heal people who struggling with thier mental health) on the Healers Meet platform, dedicated to helping users with their queries. Provide concise, actionable, and topic-specific advice in a warm tone. Focus on the user's chosen topic and ask a relevant follow-up question to deepen the conversation. secondery your second task is to give support over the helers meet plateform.
@@ -116,7 +128,7 @@ If the query is vague or unanswerable, use this fallback: "I'd love to help with
 Conversation flow:
 1. Introduce yourself briefly with Healers Meet company name
 2. Ask for the user's name
-3. Ask which area they need help with (mental health, relationships, career, etc.)
+3. Ask which area they need help with (mental health, relationships, career, etc.) or if they having any issues with the platform.
 4. Ask about their specific problem or query
 5. Provide specific guidance based on their query, keeping answers short and engaging
 6. according to their issue please let them know we have multiple healing THERAPIES which you can take, for this we have over 100+ experiend healers whith up to 35-40 year experience in the domain. just go on website and connect
@@ -180,7 +192,10 @@ Chat
 Call
 
 Simply visit our website, where you’ll find 100+ verified and compassionate healers—some with over 40 years of experience.
-You can browse their profiles and connect with the one who best suits your needs, either by calling or starting a chat session instantly. Remeber to do not suggest any name for healers, just give them to go to website - https://healersmeet.com/
+You can browse their profiles and connect with the one who best suits your needs, either by calling or starting a chat session instantly. Remeber to do not suggest any name for healers, just give them to go to website - https://healersmeet.com/ 
+
+
+remember to always follow the script and do not suggest any name for healers, just give them to go to website - https://healersmeet.com/, also try to finish the answers in 50 words. also if the user taking about healers are not responding, just calm them down and make them believe that the healer will respond soon just wait for a while.
 """
 
 # Fallback response
@@ -216,6 +231,48 @@ class ChatHistoryManager:
             raise ValueError("MongoDB collection cannot be None")
         self.collection = collection
 
+    async def save_user_info(self, user_info: UserInfo) -> bool:
+        """Save or update user information."""
+        try:
+            timestamp = datetime.utcnow().isoformat()
+            result = await self.collection.update_one(
+                {"email": user_info.email},
+                {
+                    "$set": {
+                        "name": user_info.name,
+                        "mobile": user_info.mobile,
+                        "city": user_info.city,
+                        "age": user_info.age,
+                        "gender": user_info.gender,
+                        "last_updated": timestamp
+                    }
+                },
+                upsert=True
+            )
+            logger.info(f"User info saved for {user_info.email}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save user info for {user_info.email}: {e}")
+            return False
+
+    async def get_user_info(self, email: str) -> Optional[Dict]:
+        """Retrieve user information."""
+        try:
+            user_doc = await self.collection.find_one({"email": email})
+            if user_doc:
+                return {
+                    "name": user_doc.get("name"),
+                    "email": user_doc.get("email"),
+                    "mobile": user_doc.get("mobile"),
+                    "city": user_doc.get("city"),
+                    "age": user_doc.get("age"),
+                    "gender": user_doc.get("gender")
+                }
+            return None
+        except Exception as e:
+            logger.error(f"Failed to retrieve user info for {email}: {e}")
+            return None
+
     async def save_chat_history(self, user_id: str, user_query: str, astro_response: str, max_history: int = 50) -> bool:
         """Save chat interaction to MongoDB."""
         try:
@@ -227,7 +284,7 @@ class ChatHistoryManager:
             }
             
             result = await self.collection.update_one(
-                {"user_id": user_id},
+                {"email": user_id},
                 {
                     "$push": {
                         "chat_history": {
@@ -251,7 +308,7 @@ class ChatHistoryManager:
         """Retrieve chat history for API context."""
         try:
             user_doc = await self.collection.find_one(
-                {"user_id": user_id},
+                {"email": user_id},
                 {"chat_history": {"$slice": -limit}}
             )
             
@@ -273,7 +330,7 @@ class ChatHistoryManager:
         """Retrieve raw chat history for API response."""
         try:
             user_doc = await self.collection.find_one(
-                {"user_id": user_id},
+                {"email": user_id},
                 {"chat_history": {"$slice": -limit}}
             )
             
@@ -512,6 +569,48 @@ async def websocket_endpoint(
     except Exception as e:
         logger.error(f"WebSocket error for user {user_id}: {e}")
         await websocket.close()
+
+@app.post("/user/register", response_model=UserResponse)
+async def register_user(
+    user_info: UserInfo,
+    chat_manager: ChatHistoryManager = Depends(get_chat_manager)
+):
+    """Register or update user information."""
+    try:
+        success = await chat_manager.save_user_info(user_info)
+        if success:
+            return UserResponse(success=True, message="User information saved successfully")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save user information"
+        )
+    except Exception as e:
+        logger.error(f"Failed to register user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to register user"
+        )
+
+@app.get("/user/{email}", response_model=UserInfo)
+async def get_user(
+    email: str,
+    chat_manager: ChatHistoryManager = Depends(get_chat_manager)
+):
+    """Get user information."""
+    try:
+        user_info = await chat_manager.get_user_info(email)
+        if user_info:
+            return user_info
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    except Exception as e:
+        logger.error(f"Failed to get user info: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get user information"
+        )
 
 @app.exception_handler(Exception)
 async def custom_exception_handler(request, exc):

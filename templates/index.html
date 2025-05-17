@@ -184,7 +184,14 @@
         <div class="bg-gradient-to-r from-primary-600 to-primary-800 text-white p-4">
             <div class="flex justify-between items-center">
                 <h1 class="text-2xl font-bold">Healers Meet</h1>
-                <div class="text-sm opacity-80">Guidance for Your Journey</div>
+                <div class="flex items-center gap-4">
+                    <button id="whatsapp-button" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition duration-200">
+                        <i class="fab fa-whatsapp mr-2"></i> WhatsApp
+                    </button>
+                    <button id="logout-button" class="bg-white text-primary-600 px-4 py-2 rounded-lg hover:bg-primary-50 transition duration-200">
+                        <i class="fas fa-sign-out-alt mr-2"></i> Logout
+                    </button>
+                </div>
             </div>
         </div>
         
@@ -352,6 +359,8 @@
         const voiceVisualizer = document.getElementById('voice-visualizer');
         const voiceReenableDiv = document.getElementById('voice-reenable');
         const enableVoiceLink = document.getElementById('enable-voice-link');
+        const logoutButton = document.getElementById('logout-button');
+        const whatsappButton = document.getElementById('whatsapp-button');
 
         // State variables
         let userInfo = JSON.parse(localStorage.getItem('userInfo')) || null;
@@ -379,6 +388,7 @@
         // Initialize screen based on userInfo
         function initializeScreen() {
             updateVoiceButtonState();
+            updateLogoutButtonVisibility();
             if (userInfo && validateUserInfo(userInfo)) {
                 userInfoScreen.classList.add('hidden');
                 chatScreen.classList.remove('hidden');
@@ -491,26 +501,44 @@
         }
 
         // Start chat
-        startChatButton.addEventListener('click', () => {
+        startChatButton.addEventListener('click', async () => {
             const newUserInfo = {
                 name: nameInput.value.trim(),
                 mobile: mobileInput.value.trim(),
                 email: emailInput.value.trim(),
                 city: cityInput.value.trim(),
-                age: ageInput.value.trim(),
+                age: parseInt(ageInput.value.trim()),
                 gender: genderInput.value
             };
 
             if (validateUserInfo(newUserInfo)) {
-                userInfo = newUserInfo;
-                localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                userInfoScreen.classList.add('hidden');
-                chatScreen.classList.remove('hidden');
-                updateVoiceButtonState();
-                setupWebSocket();
-                loadChatHistory();
-                if (!micPermissionGranted) {
-                    addMessage('bot', 'Voice input disabled. You can type your messages or enable voice input.');
+                try {
+                    // Register user with backend
+                    const response = await fetch('/user/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newUserInfo)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to register user');
+                    }
+
+                    userInfo = newUserInfo;
+                    localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                    userInfoScreen.classList.add('hidden');
+                    chatScreen.classList.remove('hidden');
+                    updateVoiceButtonState();
+                    updateLogoutButtonVisibility();
+                    setupWebSocket();
+                    loadChatHistory();
+                    if (!micPermissionGranted) {
+                        addMessage('bot', 'Voice input disabled. You can type your messages or enable voice input.');
+                    }
+                } catch (error) {
+                    console.error('Error registering user:', error);
+                    userInfoError.textContent = 'Failed to register. Please try again.';
+                    userInfoError.classList.remove('hidden');
                 }
             } else {
                 userInfoError.classList.remove('hidden');
@@ -805,6 +833,43 @@
                 stopRecording();
             }
         });
+
+        // WhatsApp button click handler
+        whatsappButton.addEventListener('click', () => {
+            const userName = userInfo ? userInfo.name : 'there';
+            const message = `Hello I am ${userName}, I want to connect a healer urgently`;
+            const encodedMessage = encodeURIComponent(message);
+            const whatsappLink = `https://wa.me/+919039011351?text=${encodedMessage}`;
+            console.log(whatsappLink);
+            window.open(whatsappLink, '_blank');
+        });
+
+        // Logout functionality
+        logoutButton.addEventListener('click', () => {
+            localStorage.removeItem('userInfo');
+            localStorage.removeItem('micPermission');
+            userInfo = null;
+            micPermissionGranted = false;
+            if (websocket) {
+                websocket.close();
+            }
+            userInfoScreen.classList.remove('hidden');
+            chatScreen.classList.add('hidden');
+            chatMessages.innerHTML = '';
+            messageInput.value = '';
+            updateVoiceButtonState();
+        });
+
+        // Update logout button visibility
+        function updateLogoutButtonVisibility() {
+            if (userInfo) {
+                logoutButton.classList.remove('hidden');
+                whatsappButton.classList.remove('hidden');
+            } else {
+                logoutButton.classList.add('hidden');
+                whatsappButton.classList.add('hidden');
+            }
+        }
     </script>
 </body>
 </html>
