@@ -174,7 +174,7 @@ Response Example:
 
 We sincerely apologize for the inconvenience you're facing. For payment-related issues or anything that seems unusual, we have a dedicated support team available to help you right away.
 You can reach them directly at:
-📞 +91-9039011353
+📞 +91-9039011351
 📧 support@healersmeet.com
 Please don't hesitate to contact them—they'll prioritize your case and ensure it's handled promptly.
  If the user asks how to connect with a counselor or therapist:
@@ -190,7 +190,7 @@ Steps to connect with healer:
 4. Select the healer you want to connect with and start chat. (First chat is free for all users for 15 minutes)
 5. After first 15 minutes you need to recharge your wallet to continue chat with healer.
 
-if user had questions and issues about recharge or webiste ask them to connect with support team at +91-9039011353 or support@healersmeet.com
+if user had questions and issues about recharge or webiste ask them to connect with support team at +91-9039011351 or support@healersmeet.com
 
 You can browse their profiles and connect with the one who best suits your needs, either by calling or starting a chat session instantly. Remeber to do not suggest any name for healers, just give them to go to website - https://healersmeet.com/ 
 
