@@ -23,7 +23,9 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587 
 SENDER_EMAIL = "healersmeetdev@gmail.com"  
 SENDER_PASSWORD = "tgew tnlb flct davs"  
-RECIPIENT_EMAIL = "sonyraghav06@gmail.com"  
+RECIPIENT_EMAIL = "support@healersmeet.com"  
+
+
 
 # MongoDB Configuration
 MONGODB_URI = os.getenv("MONGODB_URI")
@@ -116,7 +118,7 @@ Total new clients today: {len(users)}
 The detailed information is attached in the CSV file.
 
 Best regards,
-Healers Meet Team"""
+Healers Meet Dev Team"""
     
     msg.attach(MIMEText(body, "plain"))
     

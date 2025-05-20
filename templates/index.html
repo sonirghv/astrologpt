@@ -185,10 +185,10 @@
             <div class="flex justify-between items-center">
                 <h1 class="text-2xl font-bold">Healers Meet</h1>
                 <div class="flex items-center gap-4">
-                    <button id="whatsapp-button" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition duration-200">
+                    <button id="whatsapp-button" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition duration-200 hidden">
                         <i class="fab fa-whatsapp mr-2"></i> WhatsApp
                     </button>
-                    <button id="logout-button" class="bg-white text-primary-600 px-4 py-2 rounded-lg hover:bg-primary-50 transition duration-200">
+                    <button id="logout-button" class="bg-white text-primary-600 px-4 py-2 rounded-lg hover:bg-primary-50 transition duration-200 hidden">
                         <i class="fas fa-sign-out-alt mr-2"></i> Logout
                     </button>
                 </div>
@@ -214,13 +214,50 @@
                     <p id="name-error" class="error-message">Name must contain only letters and spaces, and cannot be empty.</p>
                 </div>
                 <div class="mb-4">
-                    <input
-                        type="tel"
-                        id="mobile-input"
-                        class="w-full p-3 border border-secondary-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        placeholder="+91XXXXXXXXXX"
-                    />
-                    <p id="mobile-error" class="error-message">Mobile number must include country code (e.g., +91) followed by 10 digits.</p>
+                    <div class="flex">
+                        <select
+                            id="country-code-input"
+                            class="w-32 p-3 text-sm border border-secondary-200 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                            <option value="+1" data-full="+1 (US/CA)">+1</option>
+                            <option value="+44" data-full="+44 (UK)">+44</option>
+                            <option value="+61" data-full="+61 (AU)">+61</option>
+                            <option value="+86" data-full="+86 (CN)">+86</option>
+                            <option value="+91" selected data-full="+91 (IN)">+91</option>
+                            <option value="+33" data-full="+33 (FR)">+33</option>
+                            <option value="+49" data-full="+49 (DE)">+49</option>
+                            <option value="+81" data-full="+81 (JP)">+81</option>
+                            <option value="+7" data-full="+7 (RU)">+7</option>
+                            <option value="+34" data-full="+34 (ES)">+34</option>
+                            <option value="+39" data-full="+39 (IT)">+39</option>
+                            <option value="+55" data-full="+55 (BR)">+55</option>
+                            <option value="+52" data-full="+52 (MX)">+52</option>
+                            <option value="+27" data-full="+27 (ZA)">+27</option>
+                            <option value="+65" data-full="+65 (SG)">+65</option>
+                            <option value="+971" data-full="+971 (AE)">+971</option>
+                            <option value="+20" data-full="+20 (EG)">+20</option>
+                            <option value="+234" data-full="+234 (NG)">+234</option>
+                            <option value="+82" data-full="+82 (KR)">+82</option>
+                            <option value="+60" data-full="+60 (MY)">+60</option>
+                            <option value="+62" data-full="+62 (ID)">+62</option>
+                            <option value="+64" data-full="+64 (NZ)">+64</option>
+                            <option value="+31" data-full="+31 (NL)">+31</option>
+                            <option value="+90" data-full="+90 (TR)">+90</option>
+                            <option value="+380" data-full="+380 (UA)">+380</option>
+                            <option value="+48" data-full="+48 (PL)">+48</option>
+                            <option value="+46" data-full="+46 (SE)">+46</option>
+                            <option value="+66" data-full="+66 (TH)">+66</option>
+                            <option value="+84" data-full="+84 (VN)">+84</option>
+                            <option value="+63" data-full="+63 (PH)">+63</option>
+                        </select>
+                        <input
+                            type="tel"
+                            id="mobile-input"
+                            class="flex-1 p-3 border border-secondary-200 rounded-r-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder="Mobile Number"
+                        />
+                    </div>
+                    <p id="mobile-error" class="error-message">Please enter a valid 10-digit mobile number.</p>
                 </div>
                 <div class="mb-4">
                     <input
@@ -407,7 +444,7 @@
         // Validate user information
         function validateUserInfo(info) {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            const mobileRegex = /^\+\d{1,3}\d{10}$/;
+            const mobileRegex = /^\+\d{1,4}\d{10}$/;  // Now validates +country_code followed by digits
             const nameRegex = /^[a-zA-Z\s]+$/;
             const cityRegex = /^[a-zA-Z\s]+$/;
 
@@ -424,7 +461,7 @@
                     value: info.mobile,
                     regex: mobileRegex,
                     errorElement: mobileError,
-                    errorMessage: 'Mobile number must include country code (e.g., +91) followed by 10 digits.'
+                    errorMessage: 'Please enter a valid 10-digit mobile number.'
                 },
                 {
                     field: 'email',
@@ -468,6 +505,47 @@
 
         // Request permission immediately
         requestMicPermission();
+        
+        // Country code dropdown enhancement
+        const countryCodeDropdown = document.getElementById('country-code-input');
+        
+        // Store original text content
+        const originalOptions = [...countryCodeDropdown.options].map(option => {
+            return {
+                value: option.value,
+                text: option.textContent,
+                fullText: option.getAttribute('data-full')
+            };
+        });
+        
+        // Show full text (with country names) when dropdown is opened
+        countryCodeDropdown.addEventListener('mousedown', function() {
+            setTimeout(() => {
+                for (let i = 0; i < this.options.length; i++) {
+                    this.options[i].textContent = originalOptions[i].fullText;
+                }
+            }, 0);
+        });
+        
+        // Show only codes when dropdown is closed
+        countryCodeDropdown.addEventListener('change', function() {
+            const selectedIndex = this.selectedIndex;
+            
+            setTimeout(() => {
+                for (let i = 0; i < this.options.length; i++) {
+                    this.options[i].textContent = originalOptions[i].text;
+                }
+            }, 0);
+        });
+        
+        countryCodeDropdown.addEventListener('blur', function() {
+            setTimeout(() => {
+                for (let i = 0; i < this.options.length; i++) {
+                    this.options[i].textContent = originalOptions[i].text;
+                }
+            }, 200);
+        });
+        
 
         // Re-enable voice input
         enableVoiceLink.addEventListener('click', async (e) => {
@@ -502,9 +580,12 @@
 
         // Start chat
         startChatButton.addEventListener('click', async () => {
+            const countryCode = document.getElementById('country-code-input').value;
+            const mobileNumber = mobileInput.value.trim();
+            
             const newUserInfo = {
                 name: nameInput.value.trim(),
-                mobile: mobileInput.value.trim(),
+                mobile: countryCode + mobileNumber,
                 email: emailInput.value.trim(),
                 city: cityInput.value.trim(),
                 age: parseInt(ageInput.value.trim()),
@@ -839,7 +920,8 @@
             const userName = userInfo ? userInfo.name : 'there';
             const message = `Hello I am ${userName}, I want to connect a healer urgently`;
             const encodedMessage = encodeURIComponent(message);
-            const whatsappLink = `https://wa.me/+919039011351?text=${encodedMessage}`;
+            const whatsappLink = `https://wa.me/+919981445177?text=${encodedMessage}`;
+
             console.log(whatsappLink);
             window.open(whatsappLink, '_blank');
         });
@@ -862,7 +944,10 @@
 
         // Update logout button visibility
         function updateLogoutButtonVisibility() {
-            if (userInfo) {
+            const logoutButton = document.getElementById('logout-button');
+            const whatsappButton = document.getElementById('whatsapp-button');
+            
+            if (userInfo && validateUserInfo(userInfo) && chatScreen.classList.contains('hidden') === false) {
                 logoutButton.classList.remove('hidden');
                 whatsappButton.classList.remove('hidden');
             } else {
