@@ -406,21 +406,7 @@
         let audioChunks = [];
         let isRecording = false;
         let micPermissionGranted = false;
-
-        // Request microphone permission on page load
-        async function requestMicPermission() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                stream.getTracks().forEach(track => track.stop());
-                localStorage.setItem('micPermission', 'granted');
-                micPermissionGranted = true;
-            } catch (error) {
-                console.error('Microphone permission denied:', error);
-                localStorage.setItem('micPermission', 'denied');
-                micPermissionGranted = false;
-            }
-            initializeScreen();
-        }
+        let userLoggedOut = localStorage.getItem('userLoggedOut') === 'true';
 
         // Initialize screen based on userInfo
         function initializeScreen() {
@@ -430,7 +416,18 @@
                 userInfoScreen.classList.add('hidden');
                 chatScreen.classList.remove('hidden');
                 setupWebSocket();
-                loadChatHistory();
+                
+                // Only load chat history if user didn't log out previously
+                if (!userLoggedOut) {
+                    loadChatHistory();
+                } else {
+                    // Reset the flag and clear chat messages
+                    localStorage.setItem('userLoggedOut', 'false');
+                    userLoggedOut = false;
+                    chatMessages.innerHTML = '';
+                    addMessage('bot', `Hello ${userInfo.name}! I'm Maya from Healers Meet. I'm here to provide Healing guidance. How can I assist you today?`);
+                }
+                
                 if (!micPermissionGranted) {
                     addMessage('bot', 'Voice input disabled. You can type your messages or enable voice input.');
                 }
@@ -503,9 +500,24 @@
             return isValid;
         }
 
+        // Request microphone permission on page load
+        async function requestMicPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                localStorage.setItem('micPermission', 'granted');
+                micPermissionGranted = true;
+            } catch (error) {
+                console.error('Microphone permission denied:', error);
+                localStorage.setItem('micPermission', 'denied');
+                micPermissionGranted = false;
+            }
+            initializeScreen();
+        }
+
         // Request permission immediately
         requestMicPermission();
-        
+
         // Country code dropdown enhancement
         const countryCodeDropdown = document.getElementById('country-code-input');
         
@@ -928,6 +940,7 @@
 
         // Logout functionality
         logoutButton.addEventListener('click', () => {
+            localStorage.setItem('userLoggedOut', 'true');
             localStorage.removeItem('userInfo');
             localStorage.removeItem('micPermission');
             userInfo = null;

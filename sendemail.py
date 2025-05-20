@@ -23,9 +23,7 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587 
 SENDER_EMAIL = "healersmeetdev@gmail.com"  
 SENDER_PASSWORD = "tgew tnlb flct davs"  
-RECIPIENT_EMAIL = "support@healersmeet.com"  
-
-
+RECIPIENT_EMAIL = "support@healersmeet.com "  
 
 # MongoDB Configuration
 MONGODB_URI = os.getenv("MONGODB_URI")
@@ -35,21 +33,24 @@ COLLECTION_NAME = "new_users"
 # Path for the CSV file
 CSV_PATH = "new_clients.csv"
 
-async def get_todays_users():
-    """Retrieve today's new users from MongoDB."""
+async def get_yesterdays_users():
+    """Retrieve yesterday's new users from MongoDB."""
     try:
         # Connect to MongoDB
         client = AsyncIOMotorClient(MONGODB_URI)
         db = client[DB_NAME]
         collection = db[COLLECTION_NAME]
 
-        # Get today's date in UTC
+        # Get yesterday's date range in UTC
         today = datetime.datetime.now(pytz.UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday = today - datetime.timedelta(days=1)
+        day_before = today - datetime.timedelta(days=2)
         
-        # Query for users created today
+        # Query for users created yesterday (between day before yesterday and yesterday)
         cursor = collection.find({
             "last_updated": {
-                "$gte": today.isoformat()
+                "$gte": day_before.isoformat(),
+                "$lt": today.isoformat()
             }
         })
 
@@ -59,14 +60,16 @@ async def get_todays_users():
         # Close MongoDB connection
         client.close()
         
-        return users
+        return users, yesterday.strftime("%Y-%m-%d")
     except Exception as e:
         print(f"Error retrieving users from MongoDB: {e}")
-        return []
+        yesterday_date = (datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        return [], yesterday_date
 
-def generate_csv_from_users(users):
+def generate_csv_from_users(users, report_date):
     """Generate CSV file from user data."""
-    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    # Update CSV path to include the report date
+    csv_filename = f"new_clients_{report_date}.csv"
     
     # Prepare CSV data
     csv_data = [
@@ -81,39 +84,39 @@ def generate_csv_from_users(users):
             user.get("city", ""),
             str(user.get("age", "")),
             user.get("gender", ""),
-            today
+            report_date
         ])
     
     # Write to CSV file
-    with open(CSV_PATH, "w", newline="", encoding="utf-8") as csv_file:
+    with open(csv_filename, "w", newline="", encoding="utf-8") as csv_file:
         writer = csv.writer(csv_file)
         writer.writerows(csv_data)
     
-    return CSV_PATH
+    return csv_filename
 
 async def send_email():
     """Send email with CSV attachment."""
     today = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # Get today's users
-    users = await get_todays_users()
+    # Get yesterday's users
+    users, report_date = await get_yesterdays_users()
     
     if not users:
-        print("No new users found for today.")
+        print(f"No new users found for {report_date}.")
         return False
     
     # Create message
     msg = MIMEMultipart()
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECIPIENT_EMAIL
-    msg["Subject"] = f"New Clients Report - {today}"
+    msg["Subject"] = f"New Clients Report for {report_date} - Generated on {today}"
     
     # Email body
     body = f"""Hello from Healers Meet,
 
-Here is your daily report of new clients for {today}.
+Here is your report of new clients for {report_date}.
 
-Total new clients today: {len(users)}
+Total new clients: {len(users)}
 
 The detailed information is attached in the CSV file.
 
@@ -123,7 +126,7 @@ Healers Meet Dev Team"""
     msg.attach(MIMEText(body, "plain"))
     
     # Generate and attach CSV file
-    csv_file = generate_csv_from_users(users)
+    csv_file = generate_csv_from_users(users, report_date)
     
     try:
         with open(csv_file, "rb") as file:
@@ -162,7 +165,8 @@ Healers Meet Dev Team"""
 async def job():
     """Run the email sending job."""
     ist_now = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
-    print(f"Running scheduled email job at {ist_now.strftime('%Y-%m-%d %H:%M:%S %Z')}...")
+    yesterday_date = (datetime.datetime.now(pytz.UTC) - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    print(f"Running scheduled email job at {ist_now.strftime('%Y-%m-%d %H:%M:%S %Z')}... Sending report for {yesterday_date}")
     success = await send_email()
     if success:
         print("Email job completed successfully")
