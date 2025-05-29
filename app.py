@@ -4,7 +4,7 @@ from pydantic import BaseModel, EmailStr
 from openai import OpenAI, OpenAIError
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 import os
 import logging
@@ -114,6 +114,22 @@ class AudioTranscriptionResponse(BaseModel):
 class UserResponse(BaseModel):
     success: bool
     message: str
+
+# Admin API Models
+class AdminUserInfo(BaseModel):
+    id: str
+    name: str
+    email: str
+
+class UsersListResponse(BaseModel):
+    success: bool
+    message: str
+    data: Dict[str, Any]
+
+class ChatHistoryResponse(BaseModel):
+    success: bool
+    message: str
+    data: List[Dict[str, Any]]
 
 # Enhanced prompt
 ENHANCED_PROMPT = """
@@ -274,15 +290,18 @@ class ChatHistoryManager:
             return None
 
     async def save_chat_history(self, user_id: str, user_query: str, astro_response: str, max_history: int = 50) -> bool:
-        """Save chat interaction to MongoDB."""
+        """Save chat interaction to MongoDB organized by date."""
         try:
             timestamp = datetime.utcnow().isoformat()
+            current_date = datetime.utcnow().strftime("%Y-%m-%d")
+            
             interaction = {
                 "user": user_query,
                 "astro_chatbot": astro_response,
                 "timestamp": timestamp
             }
             
+            # Save to both the old format (for backward compatibility) and new date-organized format
             result = await self.collection.update_one(
                 {"email": user_id},
                 {
@@ -290,7 +309,8 @@ class ChatHistoryManager:
                         "chat_history": {
                             "$each": [interaction],
                             "$slice": -max_history
-                        }
+                        },
+                        f"daily_chats.{current_date}": interaction
                     },
                     "$set": {"last_updated": timestamp}
                 },
@@ -305,25 +325,58 @@ class ChatHistoryManager:
             return False
 
     async def get_chat_history(self, user_id: str, limit: int = 10) -> List[Dict[str, str]]:
-        """Retrieve chat history for API context."""
+        """Retrieve today's chat history for AI context."""
         try:
+            current_date = datetime.utcnow().strftime("%Y-%m-%d")
+            
             user_doc = await self.collection.find_one(
                 {"email": user_id},
-                {"chat_history": {"$slice": -limit}}
+                {"daily_chats": 1}
             )
             
-            if user_doc and "chat_history" in user_doc:
-                messages = []
-                for interaction in user_doc["chat_history"]:
-                    messages.append({"role": "user", "content": interaction["user"]})
-                    messages.append({"role": "assistant", "content": interaction["astro_chatbot"]})
-                logger.info(f"Retrieved chat history for user {user_id}")
-                return messages
-            logger.info(f"No chat history found for user {user_id}")
+            if user_doc and "daily_chats" in user_doc:
+                daily_chats = user_doc["daily_chats"]
+                if current_date in daily_chats:
+                    today_chats = daily_chats[current_date]
+                    
+                    messages = []
+                    # Handle both single chat and array of chats
+                    if isinstance(today_chats, list):
+                        # Take the last 'limit' chats from today
+                        recent_chats = today_chats[-limit:] if len(today_chats) > limit else today_chats
+                        for interaction in recent_chats:
+                            messages.append({"role": "user", "content": interaction["user"]})
+                            messages.append({"role": "assistant", "content": interaction["astro_chatbot"]})
+                    else:
+                        # Single chat object
+                        messages.append({"role": "user", "content": today_chats["user"]})
+                        messages.append({"role": "assistant", "content": today_chats["astro_chatbot"]})
+                    
+                    logger.info(f"Retrieved today's chat history for user {user_id} ({len(messages)//2} interactions)")
+                    return messages
+            
+            logger.info(f"No chat history found for today for user {user_id}")
             return []
             
         except Exception as e:
-            logger.warning(f"Non-critical failure retrieving chat history for user {user_id}: {e}")
+            logger.warning(f"Non-critical failure retrieving today's chat history for user {user_id}: {e}")
+            # Fallback to old method if daily_chats fails
+            try:
+                user_doc = await self.collection.find_one(
+                    {"email": user_id},
+                    {"chat_history": {"$slice": -limit}}
+                )
+                
+                if user_doc and "chat_history" in user_doc:
+                    messages = []
+                    for interaction in user_doc["chat_history"]:
+                        messages.append({"role": "user", "content": interaction["user"]})
+                        messages.append({"role": "assistant", "content": interaction["astro_chatbot"]})
+                    logger.info(f"Retrieved fallback chat history for user {user_id}")
+                    return messages
+            except Exception as fallback_error:
+                logger.warning(f"Fallback also failed for user {user_id}: {fallback_error}")
+            
             return []
 
     async def get_raw_chat_history(self, user_id: str, limit: int = 10) -> List[Dict[str, str]]:
@@ -620,6 +673,193 @@ async def get_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get user information"
         )
+
+
+# Admin Endpoints
+@app.get("/admin/users", response_model=UsersListResponse)
+async def get_all_users(
+    page: int = 1,
+    limit: int = 10,
+    chat_manager: ChatHistoryManager = Depends(get_chat_manager)
+):
+    """Get all users with pagination."""
+    try:
+        if page < 1:
+            return UsersListResponse(
+                success=False,
+                message="Page number must be greater than 0",
+                data={}
+            )
+        
+        if limit < 1 or limit > 100:
+            return UsersListResponse(
+                success=False,
+                message="Limit must be between 1 and 100",
+                data={}
+            )
+        
+        skip = (page - 1) * limit
+        
+        # Get total count
+        total_users = await chat_manager.collection.count_documents({})
+        
+        # Calculate total pages
+        total_pages = 0 if total_users == 0 else (total_users + limit - 1) // limit
+        
+        # Validate if requested page exists
+        if total_users > 0 and page > total_pages:
+            return UsersListResponse(
+                success=False,
+                message=f"Page {page} does not exist. Total pages available: {total_pages}",
+                data={}
+            )
+        
+        # Get users with pagination
+        cursor = chat_manager.collection.find(
+            {},
+            {"user_id": 1, "name": 1, "email": 1, "_id": 1}
+        ).skip(skip).limit(limit)
+        
+        users = []
+        async for user in cursor:
+            users.append({
+                "id": str(user.get("_id", "")),
+                "name": user.get("name", "N/A"),
+                "email": user.get("email", user.get("user_id", "N/A"))
+            })
+        
+        return UsersListResponse(
+            success=True,
+            message="Users retrieved successfully",
+            data={
+                "users": users,
+                "pagination": {
+                    "current_page": page,
+                    "total_pages": total_pages,
+                    "total_users": total_users,
+                    "limit": limit,
+                    "has_next": page < total_pages,
+                    "has_prev": page > 1
+                }
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to retrieve users: {e}")
+        return UsersListResponse(
+            success=False,
+            message="Failed to retrieve users",
+            data={}
+        )
+
+@app.get("/admin/chat-history/{user_identifier}", response_model=ChatHistoryResponse)
+async def get_user_chat_history(
+    user_identifier: str,
+    date: Optional[str] = None,
+    chat_manager: ChatHistoryManager = Depends(get_chat_manager)
+):
+    """Get chat history for a specific user filtered by date.
+    
+    Args:
+        user_identifier: User email or MongoDB ObjectId
+        date: Date in YYYY-MM-DD format (optional)
+    """
+    try:
+        from datetime import datetime
+        from bson import ObjectId
+        import re
+        
+        # Try to find user by email first, then by ObjectId
+        user_query = {}
+        
+        # Check if it's a valid ObjectId
+        if ObjectId.is_valid(user_identifier):
+            user_query = {"_id": ObjectId(user_identifier)}
+        else:
+            # Assume it's an email or user_id
+            user_query = {
+                "$or": [
+                    {"email": user_identifier},
+                    {"user_id": user_identifier}
+                ]
+            }
+        
+        user_doc = await chat_manager.collection.find_one(user_query)
+        
+        if not user_doc:
+            return ChatHistoryResponse(
+                success=False,
+                message="User not found",
+                data=[]
+            )
+        
+        chat_history = []
+        
+        # Filter by date if provided
+        if date:
+            try:
+                # Validate date format
+                datetime.strptime(date, "%Y-%m-%d")
+                
+                # Get chats for specific date from daily_chats
+                daily_chats = user_doc.get("daily_chats", {})
+                if date in daily_chats:
+                    date_chats = daily_chats[date]
+                    # Handle both single chat and array of chats
+                    if isinstance(date_chats, list):
+                        for chat in date_chats:
+                            chat_history.append({
+                                "user": chat.get("user", ""),
+                                "AI": chat.get("astro_chatbot", "")
+                            })
+                    else:
+                        chat_history.append({
+                            "user": date_chats.get("user", ""),
+                            "AI": date_chats.get("astro_chatbot", "")
+                        })
+                
+            except ValueError:
+                return ChatHistoryResponse(
+                    success=False,
+                    message="Invalid date format. Use YYYY-MM-DD",
+                    data=[]
+                )
+        else:
+            # Return all chat history with simplified format
+            all_chats = user_doc.get("chat_history", [])
+            for chat in all_chats:
+                chat_history.append({
+                    "user": chat.get("user", ""),
+                    "AI": chat.get("astro_chatbot", "")
+                })
+        
+        # Get user info for response
+        user_info = {
+            "user_id": str(user_doc.get("_id", "")),
+            "name": user_doc.get("name", "N/A"),
+            "email": user_doc.get("email", user_doc.get("user_id", "N/A")),
+            "total_chats": len(chat_history)
+        }
+        
+        return ChatHistoryResponse(
+            success=True,
+            message=f"Chat history retrieved successfully{' for date ' + date if date else ''}",
+            data=[
+                {
+                    "user_info": user_info,
+                    "chat_history": chat_history
+                }
+            ]
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to retrieve chat history for user {user_identifier}: {e}")
+        return ChatHistoryResponse(
+            success=False,
+            message="Failed to retrieve chat history",
+            data=[]
+        )
+
 
 @app.exception_handler(Exception)
 async def custom_exception_handler(request, exc):
