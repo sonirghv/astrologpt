@@ -28,7 +28,7 @@ RECIPIENT_EMAIL = "support@healersmeet.com "
 # MongoDB Configuration
 MONGODB_URI = os.getenv("MONGODB_URI")
 DB_NAME = "HealersMeet"
-COLLECTION_NAME = "new_users"
+COLLECTION_NAME = "ChatBotUsers"
 
 # Path for the CSV file
 CSV_PATH = "new_clients.csv"

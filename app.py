@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
         app.state.mongo_client = AsyncIOMotorClient(mongodb_uri, serverSelectionTimeoutMS=5000)
         await app.state.mongo_client.admin.command('ping')
         app.state.db = app.state.mongo_client["HealersMeet"]
-        app.state.collection = app.state.db["new_users"]
+        app.state.collection = app.state.db["ChatBotUsers"]
         if app.state.collection is None:
             logger.error("Failed to initialize MongoDB collection")
             raise RuntimeError("MongoDB collection initialization failed")
