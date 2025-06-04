@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from openai import OpenAI, OpenAIError
 from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
 from dotenv import load_dotenv
 from typing import List, Dict, Optional, Any
 from datetime import datetime
@@ -44,7 +45,7 @@ async def lifespan(app: FastAPI):
         app.state.mongo_client = AsyncIOMotorClient(mongodb_uri, serverSelectionTimeoutMS=5000)
         await app.state.mongo_client.admin.command('ping')
         app.state.db = app.state.mongo_client["HealersMeet"]
-        app.state.collection = app.state.db["ChatBotUsers"]
+        app.state.collection = app.state.db["new_users"]
         if app.state.collection is None:
             logger.error("Failed to initialize MongoDB collection")
             raise RuntimeError("MongoDB collection initialization failed")
@@ -115,21 +116,17 @@ class UserResponse(BaseModel):
     success: bool
     message: str
 
-# Admin API Models
-class AdminUserInfo(BaseModel):
-    id: str
-    name: str
-    email: str
-
-class UsersListResponse(BaseModel):
+class UserListResponse(BaseModel):
+    """Response model for users list API."""
     success: bool
-    message: str
     data: Dict[str, Any]
-
-class ChatHistoryResponse(BaseModel):
-    success: bool
     message: str
-    data: List[Dict[str, Any]]
+
+class AdminChatHistoryResponse(BaseModel):
+    """Response model for admin chat history API."""
+    success: bool
+    data: Dict[str, Any]
+    message: str
 
 # Enhanced prompt
 ENHANCED_PROMPT = """
@@ -290,18 +287,15 @@ class ChatHistoryManager:
             return None
 
     async def save_chat_history(self, user_id: str, user_query: str, astro_response: str, max_history: int = 50) -> bool:
-        """Save chat interaction to MongoDB organized by date."""
+        """Save chat interaction to MongoDB."""
         try:
             timestamp = datetime.utcnow().isoformat()
-            current_date = datetime.utcnow().strftime("%Y-%m-%d")
-            
             interaction = {
                 "user": user_query,
                 "astro_chatbot": astro_response,
                 "timestamp": timestamp
             }
             
-            # Save to both the old format (for backward compatibility) and new date-organized format
             result = await self.collection.update_one(
                 {"email": user_id},
                 {
@@ -309,8 +303,7 @@ class ChatHistoryManager:
                         "chat_history": {
                             "$each": [interaction],
                             "$slice": -max_history
-                        },
-                        f"daily_chats.{current_date}": interaction
+                        }
                     },
                     "$set": {"last_updated": timestamp}
                 },
@@ -325,58 +318,25 @@ class ChatHistoryManager:
             return False
 
     async def get_chat_history(self, user_id: str, limit: int = 10) -> List[Dict[str, str]]:
-        """Retrieve today's chat history for AI context."""
+        """Retrieve chat history for API context."""
         try:
-            current_date = datetime.utcnow().strftime("%Y-%m-%d")
-            
             user_doc = await self.collection.find_one(
                 {"email": user_id},
-                {"daily_chats": 1}
+                {"chat_history": {"$slice": -limit}}
             )
             
-            if user_doc and "daily_chats" in user_doc:
-                daily_chats = user_doc["daily_chats"]
-                if current_date in daily_chats:
-                    today_chats = daily_chats[current_date]
-                    
-                    messages = []
-                    # Handle both single chat and array of chats
-                    if isinstance(today_chats, list):
-                        # Take the last 'limit' chats from today
-                        recent_chats = today_chats[-limit:] if len(today_chats) > limit else today_chats
-                        for interaction in recent_chats:
-                            messages.append({"role": "user", "content": interaction["user"]})
-                            messages.append({"role": "assistant", "content": interaction["astro_chatbot"]})
-                    else:
-                        # Single chat object
-                        messages.append({"role": "user", "content": today_chats["user"]})
-                        messages.append({"role": "assistant", "content": today_chats["astro_chatbot"]})
-                    
-                    logger.info(f"Retrieved today's chat history for user {user_id} ({len(messages)//2} interactions)")
-                    return messages
-            
-            logger.info(f"No chat history found for today for user {user_id}")
+            if user_doc and "chat_history" in user_doc:
+                messages = []
+                for interaction in user_doc["chat_history"]:
+                    messages.append({"role": "user", "content": interaction["user"]})
+                    messages.append({"role": "assistant", "content": interaction["astro_chatbot"]})
+                logger.info(f"Retrieved chat history for user {user_id}")
+                return messages
+            logger.info(f"No chat history found for user {user_id}")
             return []
             
         except Exception as e:
-            logger.warning(f"Non-critical failure retrieving today's chat history for user {user_id}: {e}")
-            # Fallback to old method if daily_chats fails
-            try:
-                user_doc = await self.collection.find_one(
-                    {"email": user_id},
-                    {"chat_history": {"$slice": -limit}}
-                )
-                
-                if user_doc and "chat_history" in user_doc:
-                    messages = []
-                    for interaction in user_doc["chat_history"]:
-                        messages.append({"role": "user", "content": interaction["user"]})
-                        messages.append({"role": "assistant", "content": interaction["astro_chatbot"]})
-                    logger.info(f"Retrieved fallback chat history for user {user_id}")
-                    return messages
-            except Exception as fallback_error:
-                logger.warning(f"Fallback also failed for user {user_id}: {fallback_error}")
-            
+            logger.warning(f"Non-critical failure retrieving chat history for user {user_id}: {e}")
             return []
 
     async def get_raw_chat_history(self, user_id: str, limit: int = 10) -> List[Dict[str, str]]:
@@ -399,6 +359,240 @@ class ChatHistoryManager:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to retrieve chat history"
             )
+
+    async def get_users_by_date_range(self, start_date: str, end_date: str, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+        """Retrieve all users within a specific date range with pagination support."""
+        try:
+            # Validate pagination parameters
+            if page < 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Page number must be greater than 0"
+                )
+            
+            if page_size < 1 or page_size > 100:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Page size must be between 1 and 100"
+                )
+            
+            # Validate date format and convert to datetime objects
+            try:
+                start_datetime = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            except ValueError:
+                logger.error(f"Invalid date format. Expected ISO format, got start: {start_date}, end: {end_date}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)"
+                )
+            
+            # Ensure start_date is before end_date
+            if start_datetime >= end_datetime:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Start date must be before end date"
+                )
+            
+            # Convert back to ISO string for MongoDB query
+            start_iso = start_datetime.isoformat()
+            end_iso = end_datetime.isoformat()
+            
+            # Create query filter
+            query_filter = {
+                "last_updated": {
+                    "$gte": start_iso,
+                    "$lte": end_iso
+                }
+            }
+            
+            # Get total count for pagination metadata
+            total_users = await self.collection.count_documents(query_filter)
+            
+            # Calculate pagination values
+            total_pages = (total_users + page_size - 1) // page_size  # Ceiling division
+            skip = (page - 1) * page_size
+            has_next = page < total_pages
+            has_previous = page > 1
+            
+            # Query MongoDB for users within date range with pagination
+            cursor = self.collection.find(query_filter).skip(skip).limit(page_size).sort("last_updated", -1)
+            
+            # Convert cursor to list and extract user information
+            users_docs = await cursor.to_list(length=page_size)
+            users_list = []
+            
+            for user_doc in users_docs:
+                user_info = {
+                    "user_id": str(user_doc.get("_id", "")),  # Using MongoDB _id as user_id
+                    "name": user_doc.get("name", ""),
+                    "email": user_doc.get("email", ""),
+                    "mobile": user_doc.get("mobile", ""),
+                    "city": user_doc.get("city", ""),
+                    "age": str(user_doc.get("age", "")),
+                    "gender": user_doc.get("gender", ""),
+                    "last_updated": user_doc.get("last_updated", "")
+                }
+                users_list.append(user_info)
+            
+            logger.info(f"Retrieved {len(users_list)} users (page {page}/{total_pages}) between {start_date} and {end_date}")
+            
+            return {
+                "users": users_list,
+                "total_users": total_users,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": has_next,
+                "has_previous": has_previous,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to retrieve users by date range: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve users"
+            )
+
+    async def get_admin_chat_history(self, user_id: str, start_date: str, end_date: str, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
+        """
+        Retrieve chat history for a specific user within a date range with pagination support.
+        Admin function to get detailed chat history for any user.
+        """
+        try:
+            # Validate pagination parameters
+            if page < 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Page number must be greater than 0"
+                )
+            
+            if page_size < 1 or page_size > 100:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Page size must be between 1 and 100"
+                )
+            
+            # Validate date format and convert to datetime objects
+            try:
+                start_datetime = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            except ValueError:
+                logger.error(f"Invalid date format. Expected ISO format, got start: {start_date}, end: {end_date}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)"
+                )
+            
+            # Ensure start_date is before end_date
+            if start_datetime >= end_datetime:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Start date must be before end date"
+                )
+            
+            # Convert back to ISO string for MongoDB query
+            start_iso = start_datetime.isoformat()
+            end_iso = end_datetime.isoformat()
+            
+            # Get user document to check if user exists and get user info
+            # Try to find user by MongoDB _id first, then by email
+            user_doc = None
+            try:
+                # Check if user_id is a valid ObjectId
+                if ObjectId.is_valid(user_id):
+                    user_doc = await self.collection.find_one({"_id": ObjectId(user_id)})
+            except Exception:
+                pass
+            
+            # If not found by _id, try to find by email
+            if not user_doc:
+                user_doc = await self.collection.find_one({"email": user_id})
+            
+            if not user_doc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            user_name = user_doc.get("name", "")
+            chat_history = user_doc.get("chat_history", [])
+            
+            # Filter chat history by date range
+            filtered_history = []
+            for chat in chat_history:
+                chat_timestamp = chat.get("timestamp", "")
+                if chat_timestamp:
+                    try:
+                        chat_datetime = datetime.fromisoformat(chat_timestamp.replace('Z', '+00:00'))
+                        if start_datetime <= chat_datetime <= end_datetime:
+                            filtered_history.append(chat)
+                    except ValueError:
+                        # Skip chats with invalid timestamps
+                        continue
+            
+            # Sort by timestamp (newest first)
+            filtered_history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            
+            # Calculate pagination values
+            total_messages = len(filtered_history)
+            total_pages = (total_messages + page_size - 1) // page_size if total_messages > 0 else 1
+            skip = (page - 1) * page_size
+            has_next = page < total_pages
+            has_previous = page > 1
+            
+            # Apply pagination
+            paginated_history = filtered_history[skip:skip + page_size]
+            
+            # Format chat history for response
+            formatted_history = []
+            for chat in paginated_history:
+                formatted_chat = {
+                    "user_message": chat.get("user", ""),
+                    "bot_response": chat.get("astro_chatbot", ""),
+                    "timestamp": chat.get("timestamp", ""),
+                    "formatted_time": self._format_timestamp(chat.get("timestamp", ""))
+                }
+                formatted_history.append(formatted_chat)
+            
+            logger.info(f"Retrieved {len(formatted_history)} chat messages for user {user_id} (page {page}/{total_pages}) between {start_date} and {end_date}")
+            
+            return {
+                "user_id": user_id,
+                "user_name": user_name,
+                "chat_history": formatted_history,
+                "total_messages": total_messages,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": has_next,
+                "has_previous": has_previous,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to retrieve admin chat history for user {user_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve chat history"
+            )
+    
+    def _format_timestamp(self, timestamp: str) -> str:
+        """Format timestamp for better readability."""
+        try:
+            if timestamp:
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+            return ""
+        except Exception:
+            return timestamp
 
 async def get_response(
     user_id: str,
@@ -674,192 +868,105 @@ async def get_user(
             detail="Failed to get user information"
         )
 
-
-# Admin Endpoints
-@app.get("/admin/users", response_model=UsersListResponse)
-async def get_all_users(
+@app.get("/users/list", response_model=UserListResponse)
+async def get_users_by_date_range(
+    start_date: str,
+    end_date: str,
     page: int = 1,
-    limit: int = 10,
+    page_size: int = 10,
     chat_manager: ChatHistoryManager = Depends(get_chat_manager)
 ):
-    """Get all users with pagination."""
-    try:
-        if page < 1:
-            return UsersListResponse(
-                success=False,
-                message="Page number must be greater than 0",
-                data={}
-            )
-        
-        if limit < 1 or limit > 100:
-            return UsersListResponse(
-                success=False,
-                message="Limit must be between 1 and 100",
-                data={}
-            )
-        
-        skip = (page - 1) * limit
-        
-        # Get total count
-        total_users = await chat_manager.collection.count_documents({})
-        
-        # Calculate total pages
-        total_pages = 0 if total_users == 0 else (total_users + limit - 1) // limit
-        
-        # Validate if requested page exists
-        if total_users > 0 and page > total_pages:
-            return UsersListResponse(
-                success=False,
-                message=f"Page {page} does not exist. Total pages available: {total_pages}",
-                data={}
-            )
-        
-        # Get users with pagination
-        cursor = chat_manager.collection.find(
-            {},
-            {"user_id": 1, "name": 1, "email": 1, "_id": 1}
-        ).skip(skip).limit(limit)
-        
-        users = []
-        async for user in cursor:
-            users.append({
-                "id": str(user.get("_id", "")),
-                "name": user.get("name", "N/A"),
-                "email": user.get("email", user.get("user_id", "N/A"))
-            })
-        
-        return UsersListResponse(
-            success=True,
-            message="Users retrieved successfully",
-            data={
-                "users": users,
-                "pagination": {
-                    "current_page": page,
-                    "total_pages": total_pages,
-                    "total_users": total_users,
-                    "limit": limit,
-                    "has_next": page < total_pages,
-                    "has_prev": page > 1
-                }
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to retrieve users: {e}")
-        return UsersListResponse(
-            success=False,
-            message="Failed to retrieve users",
-            data={}
-        )
-
-@app.get("/admin/chat-history/{user_identifier}", response_model=ChatHistoryResponse)
-async def get_user_chat_history(
-    user_identifier: str,
-    date: Optional[str] = None,
-    chat_manager: ChatHistoryManager = Depends(get_chat_manager)
-):
-    """Get chat history for a specific user filtered by date.
+    """
+    Get all users within a specific time period with pagination support.
     
     Args:
-        user_identifier: User email or MongoDB ObjectId
-        date: Date in YYYY-MM-DD format (optional)
+        start_date: Start date in ISO format (YYYY-MM-DDTHH:MM:SS)
+        end_date: End date in ISO format (YYYY-MM-DDTHH:MM:SS)
+        page: Page number (default: 1, min: 1)
+        page_size: Number of users per page (default: 10, min: 1, max: 100)
+    
+    Returns:
+        UserListResponse: Paginated list of users with metadata
+    
+    Examples:
+        GET /users/list?start_date=2024-01-01T00:00:00&end_date=2024-01-31T23:59:59
+        GET /users/list?start_date=2024-01-01T00:00:00&end_date=2024-01-31T23:59:59&page=2&page_size=20
     """
     try:
-        from datetime import datetime
-        from bson import ObjectId
-        import re
+        logger.info(f"Fetching users between {start_date} and {end_date} (page {page}, size {page_size})")
         
-        # Try to find user by email first, then by ObjectId
-        user_query = {}
+        # Get paginated users from database
+        result = await chat_manager.get_users_by_date_range(start_date, end_date, page, page_size)
         
-        # Check if it's a valid ObjectId
-        if ObjectId.is_valid(user_identifier):
-            user_query = {"_id": ObjectId(user_identifier)}
-        else:
-            # Assume it's an email or user_id
-            user_query = {
-                "$or": [
-                    {"email": user_identifier},
-                    {"user_id": user_identifier}
-                ]
-            }
-        
-        user_doc = await chat_manager.collection.find_one(user_query)
-        
-        if not user_doc:
-            return ChatHistoryResponse(
-                success=False,
-                message="User not found",
-                data=[]
-            )
-        
-        chat_history = []
-        
-        # Filter by date if provided
-        if date:
-            try:
-                # Validate date format
-                datetime.strptime(date, "%Y-%m-%d")
-                
-                # Get chats for specific date from daily_chats
-                daily_chats = user_doc.get("daily_chats", {})
-                if date in daily_chats:
-                    date_chats = daily_chats[date]
-                    # Handle both single chat and array of chats
-                    if isinstance(date_chats, list):
-                        for chat in date_chats:
-                            chat_history.append({
-                                "user": chat.get("user", ""),
-                                "AI": chat.get("astro_chatbot", "")
-                            })
-                    else:
-                        chat_history.append({
-                            "user": date_chats.get("user", ""),
-                            "AI": date_chats.get("astro_chatbot", "")
-                        })
-                
-            except ValueError:
-                return ChatHistoryResponse(
-                    success=False,
-                    message="Invalid date format. Use YYYY-MM-DD",
-                    data=[]
-                )
-        else:
-            # Return all chat history with simplified format
-            all_chats = user_doc.get("chat_history", [])
-            for chat in all_chats:
-                chat_history.append({
-                    "user": chat.get("user", ""),
-                    "AI": chat.get("astro_chatbot", "")
-                })
-        
-        # Get user info for response
-        user_info = {
-            "user_id": str(user_doc.get("_id", "")),
-            "name": user_doc.get("name", "N/A"),
-            "email": user_doc.get("email", user_doc.get("user_id", "N/A")),
-            "total_chats": len(chat_history)
-        }
-        
-        return ChatHistoryResponse(
+        # Prepare response
+        response = UserListResponse(
             success=True,
-            message=f"Chat history retrieved successfully{' for date ' + date if date else ''}",
-            data=[
-                {
-                    "user_info": user_info,
-                    "chat_history": chat_history
-                }
-            ]
+            data=result,
+            message="Users retrieved successfully"
         )
         
+        logger.info(f"Successfully retrieved {len(result['users'])} users (page {page}/{result['total_pages']})")
+        return response
+        
+    except HTTPException as e:
+        raise
     except Exception as e:
-        logger.error(f"Failed to retrieve chat history for user {user_identifier}: {e}")
-        return ChatHistoryResponse(
-            success=False,
-            message="Failed to retrieve chat history",
-            data=[]
+        logger.error(f"Failed to get users by date range: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve users"
         )
 
+@app.get("/admin/chat-history/{user_id}", response_model=AdminChatHistoryResponse)
+async def get_admin_chat_history(
+    user_id: str,
+    start_date: str,
+    end_date: str,
+    page: int = 1,
+    page_size: int = 20,
+    chat_manager: ChatHistoryManager = Depends(get_chat_manager)
+):
+    """
+    Admin endpoint to get chat history for a specific user within a date range.
+    
+    Args:
+        user_id: User email ID to get chat history for
+        start_date: Start date in ISO format (YYYY-MM-DDTHH:MM:SS)
+        end_date: End date in ISO format (YYYY-MM-DDTHH:MM:SS)
+        page: Page number (default: 1, min: 1)
+        page_size: Number of messages per page (default: 20, min: 1, max: 100)
+    
+    Returns:
+        AdminChatHistoryResponse: Paginated chat history with user details
+    
+    Examples:
+        GET /admin/chat-history/user@example.com?start_date=2024-01-01T00:00:00&end_date=2024-01-31T23:59:59
+        GET /admin/chat-history/user@example.com?start_date=2024-01-01T00:00:00&end_date=2024-01-31T23:59:59&page=2&page_size=50
+    """
+    try:
+        logger.info(f"Admin fetching chat history for user {user_id} between {start_date} and {end_date} (page {page}, size {page_size})")
+        
+        # Get paginated chat history from database
+        result = await chat_manager.get_admin_chat_history(user_id, start_date, end_date, page, page_size)
+        
+        # Prepare response
+        response = AdminChatHistoryResponse(
+            success=True,
+            data=result,
+            message="Chat history retrieved successfully"
+        )
+        
+        logger.info(f"Successfully retrieved {len(result['chat_history'])} messages for user {user_id} (page {page}/{result['total_pages']})")
+        return response
+        
+    except HTTPException as e:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get admin chat history for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve chat history"
+        )
 
 @app.exception_handler(Exception)
 async def custom_exception_handler(request, exc):
